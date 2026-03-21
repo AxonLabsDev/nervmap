@@ -23,6 +23,7 @@ from nervmap.diagnostics.rules.systemd_rules import (
 from nervmap.diagnostics.rules.dependencies import (
     check_dependency_down,
     check_env_port_mismatch,
+    check_circular_dependency,
 )
 from nervmap.diagnostics.rules.resources import (
     check_disk_pressure,
@@ -55,15 +56,23 @@ class TestNetworkRules:
 
     def test_port_unreachable(self):
         """Running service with port not in listening set triggers warning."""
-        svc = Service(id="docker:api", name="api", type="docker",
+        svc = Service(id="process:api:9999", name="api", type="process",
                       status="running", ports=[9999])
         state = SystemState(services=[svc], listening_ports={})
         issues = check_port_unreachable(state, DEFAULTS)
         assert len(issues) == 1
         assert issues[0].rule_id == "port-unreachable"
 
+    def test_port_unreachable_skips_docker_internal(self):
+        """Docker containers with internal-only ports should NOT be flagged."""
+        svc = Service(id="docker:db", name="db", type="docker",
+                      status="running", ports=[5432])
+        state = SystemState(services=[svc], listening_ports={})
+        issues = check_port_unreachable(state, DEFAULTS)
+        assert len(issues) == 0
+
     def test_wildcard_exposure(self):
-        """Listening on 0.0.0.0 triggers info issue."""
+        """Listening on 0.0.0.0 triggers warning issue (security)."""
         svc = Service(id="docker:web", name="web", type="docker",
                       status="running", ports=[8080])
         state = SystemState(
@@ -72,7 +81,7 @@ class TestNetworkRules:
         )
         issues = check_port_exposed_wildcard(state, DEFAULTS)
         assert len(issues) == 1
-        assert issues[0].severity == "info"
+        assert issues[0].severity == "warning"
 
 
 class TestDockerRules:
@@ -234,3 +243,61 @@ class TestRuleRunner:
             for i in range(len(issues) - 1):
                 assert severity_order.get(issues[i].severity, 3) <= \
                        severity_order.get(issues[i+1].severity, 3)
+
+
+class TestCircularDependency:
+    """Tests for circular dependency detection."""
+
+    def test_simple_cycle(self):
+        """A -> B -> A is detected."""
+        svc_a = Service(id="docker:a", name="a", type="docker", status="running")
+        svc_b = Service(id="docker:b", name="b", type="docker", status="running")
+        conn1 = Connection(source="docker:a", target="docker:b", type="tcp")
+        conn2 = Connection(source="docker:b", target="docker:a", type="tcp")
+        state = SystemState(services=[svc_a, svc_b], connections=[conn1, conn2])
+        issues = check_circular_dependency(state, DEFAULTS)
+        assert len(issues) >= 1
+        assert issues[0].rule_id == "circular-dependency"
+
+    def test_no_cycle(self):
+        """A -> B -> C has no cycle."""
+        conn1 = Connection(source="a", target="b", type="tcp")
+        conn2 = Connection(source="b", target="c", type="tcp")
+        state = SystemState(connections=[conn1, conn2])
+        issues = check_circular_dependency(state, DEFAULTS)
+        assert len(issues) == 0
+
+
+class TestIgnoreServices:
+    """Tests for ignore.services pattern filtering."""
+
+    def test_ignore_pattern_filters_services(self):
+        """Services matching ignore patterns are excluded from diagnostics."""
+        svc_snap = Service(id="systemd:snap-core", name="snap-core", type="systemd",
+                          status="stopped", metadata={"active": "failed", "unit": "snap-core.service"})
+        svc_real = Service(id="systemd:nginx", name="nginx", type="systemd",
+                          status="stopped", metadata={"active": "failed", "unit": "nginx.service"})
+        state = SystemState(services=[svc_snap, svc_real])
+        cfg = {**DEFAULTS, "ignore": {"ports": [], "services": ["snap.*"]}}
+
+        runner = RuleRunner()
+        issues = runner.evaluate(state, cfg)
+
+        # snap-core should be filtered out, only nginx issues remain
+        service_ids = [i.service for i in issues]
+        assert "systemd:snap-core" not in service_ids
+
+
+class TestDockerProxyPortConflict:
+    """Tests for docker-proxy false positive fix."""
+
+    def test_docker_and_proxy_same_port_no_conflict(self):
+        """Docker container + docker-proxy on same port should NOT trigger conflict."""
+        from nervmap.diagnostics.rules.network import check_port_conflict
+        svc_docker = Service(id="docker:web", name="web", type="docker",
+                             status="running", ports=[8080])
+        svc_proxy = Service(id="process:docker-proxy:8080", name="docker-proxy",
+                            type="process", status="running", ports=[8080])
+        state = SystemState(services=[svc_docker, svc_proxy])
+        issues = check_port_conflict(state, DEFAULTS)
+        assert len(issues) == 0

@@ -63,3 +63,55 @@ def check_env_port_mismatch(state: SystemState, cfg: dict) -> list[Issue]:
                 ))
 
     return issues
+
+
+def check_circular_dependency(state: SystemState, cfg: dict) -> list[Issue]:
+    """Detect circular dependencies: A -> B -> ... -> A."""
+    issues: list[Issue] = []
+
+    # Build adjacency list from connections
+    graph: dict[str, set[str]] = {}
+    for conn in state.connections:
+        graph.setdefault(conn.source, set()).add(conn.target)
+
+    # DFS cycle detection
+    visited: set[str] = set()
+    in_stack: set[str] = set()
+    cycles_found: set[tuple[str, ...]] = set()
+
+    def _dfs(node: str, path: list[str]):
+        if node in in_stack:
+            # Found cycle — extract it
+            cycle_start = path.index(node)
+            cycle = tuple(sorted(path[cycle_start:]))
+            if cycle not in cycles_found:
+                cycles_found.add(cycle)
+                cycle_path = path[cycle_start:] + [node]
+                chain = " -> ".join(cycle_path)
+                issues.append(Issue(
+                    rule_id="circular-dependency",
+                    severity="warning",
+                    service=node,
+                    message=f"Circular dependency detected: {chain}",
+                    hint="Break the cycle by removing one dependency or using async communication.",
+                    impact=list(path[cycle_start:]),
+                ))
+            return
+        if node in visited:
+            return
+
+        visited.add(node)
+        in_stack.add(node)
+        path.append(node)
+
+        for neighbor in graph.get(node, []):
+            _dfs(neighbor, path)
+
+        path.pop()
+        in_stack.discard(node)
+
+    for node in graph:
+        if node not in visited:
+            _dfs(node, [])
+
+    return issues

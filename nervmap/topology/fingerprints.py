@@ -71,7 +71,6 @@ PORT_FINGERPRINTS: dict[int, tuple[str, str]] = {
 
     # Monitoring
     9100: ("node_exporter", "Prometheus Node Exporter"),
-    9090: ("prometheus", "Prometheus"),
     9093: ("alertmanager", "Alertmanager"),
     16686: ("jaeger", "Jaeger"),
     9411: ("zipkin", "Zipkin"),

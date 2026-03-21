@@ -30,6 +30,8 @@ def get_all_rules() -> list[RuleFunc]:
     from nervmap.diagnostics.rules.dependencies import (
         check_dependency_down,
         check_env_port_mismatch,
+        check_circular_dependency,
+        check_circular_dependency,
     )
     from nervmap.diagnostics.rules.resources import (
         check_disk_pressure,
@@ -49,6 +51,7 @@ def get_all_rules() -> list[RuleFunc]:
         check_service_activating_stuck,
         check_dependency_down,
         check_env_port_mismatch,
+        check_circular_dependency,
         check_disk_pressure,
         check_memory_oom_risk,
     ]

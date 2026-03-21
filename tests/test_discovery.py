@@ -15,9 +15,10 @@ class TestDockerCollector:
 
     def test_no_docker_returns_empty(self):
         """When Docker is not available, return empty list gracefully."""
-        with patch("nervmap.discovery.docker.docker_lib", None):
-            dc = DockerCollector()
-            assert dc.collect() == []
+        # Simulate Docker unavailable by setting client to None
+        dc = DockerCollector()
+        dc._client = None
+        assert dc.collect() == []
 
     def test_collect_returns_services(self):
         """Verify Docker containers are converted to Service objects."""

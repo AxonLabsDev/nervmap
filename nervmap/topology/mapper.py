@@ -118,11 +118,7 @@ class DependencyMapper:
             # Try to extract host:port from value
             port = self._extract_port_from_url(value)
             if port:
-                # Find service listening on that port
-                sid = self.state.listening_ports.get(port)
-                if sid:
-                    return sid
-                # Check service ports
+                # Find service that owns this port
                 for s in self.state.services:
                     if port in s.ports:
                         return s.id
@@ -189,7 +185,7 @@ class DependencyMapper:
                         source=src,
                         target=tgt,
                         type="declared",
-                        confidence=0.70,
+                        confidence=1.0,
                     ))
         return conns
 

@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from nervmap.models import Service
+from nervmap.utils import redact_env
+
+logger = logging.getLogger("nervmap.docker")
 
 
 class DockerCollector:
@@ -14,6 +19,7 @@ class DockerCollector:
             self._client = docker_lib.from_env(timeout=5)
             self._client.ping()
         except Exception:
+            logger.debug("Docker not available", exc_info=True)
             self._client = None
 
     def collect(self) -> list[Service]:
@@ -24,6 +30,7 @@ class DockerCollector:
         try:
             containers = self._client.containers.list(all=True)
         except Exception:
+            logger.debug("Failed to list Docker containers", exc_info=True)
             return []
 
         for ctr in containers:
@@ -81,7 +88,7 @@ class DockerCollector:
                 if "=" in e:
                     k, v = e.split("=", 1)
                     env_dict[k] = v
-            meta["env"] = env_dict
+            meta["env"] = redact_env(env_dict)
         except Exception:
             pass
 

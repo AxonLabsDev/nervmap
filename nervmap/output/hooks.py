@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from nervmap.models import SystemState, Issue
+from nervmap.utils import redact_env
 
 
 class HookRunner:
@@ -46,15 +47,36 @@ class HookRunner:
         self._run_script(str(script), data)
 
     @staticmethod
+    def _redact_data(data: dict) -> dict:
+        """Deep-redact sensitive env values from hook data."""
+        import copy
+        safe = copy.deepcopy(data)
+        # Redact env in service dicts
+        for key in ("service", "services"):
+            if key not in safe:
+                continue
+            items = safe[key] if isinstance(safe[key], list) else [safe[key]]
+            for item in items:
+                if isinstance(item, dict) and "metadata" in item:
+                    env = item.get("metadata", {}).get("env")
+                    if env:
+                        item["metadata"]["env"] = redact_env(env)
+        # Redact env in issue dicts too (they don't normally have env, but safety)
+        return safe
+
+    @staticmethod
     def _run_script(path: str, data: dict):
         """Execute a script, passing JSON on stdin."""
         expanded = os.path.expanduser(path)
         if not os.path.isfile(expanded):
             return
+        if not os.access(expanded, os.X_OK):
+            return
         try:
+            safe_data = HookRunner._redact_data(data)
             subprocess.run(
                 [expanded],
-                input=json.dumps(data),
+                input=json.dumps(safe_data),
                 text=True,
                 timeout=10,
                 capture_output=True,

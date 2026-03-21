@@ -23,6 +23,17 @@ def check_port_conflict(state: SystemState, cfg: dict) -> list[Issue]:
 
     for port, owners in port_owners.items():
         if len(owners) > 1:
+            # Skip false positive: docker container + its docker-proxy share ports
+            svc_types = set()
+            for oid in owners:
+                svc = state.service_by_id(oid)
+                if svc:
+                    svc_types.add(svc.type)
+            has_docker = "docker" in svc_types
+            has_proxy = any("docker-proxy" in oid for oid in owners)
+            if has_docker and has_proxy:
+                continue
+
             issues.append(Issue(
                 rule_id="port-conflict",
                 severity="critical",
@@ -48,6 +59,11 @@ def check_port_unreachable(state: SystemState, cfg: dict) -> list[Issue]:
             if port in ignored:
                 continue
             if port not in listening:
+                # Skip Docker internal-only ports: container exposes ports
+                # in its own network namespace that are NOT on the host.
+                # Only flag ports that should be on the host (i.e., mapped ports).
+                if svc.type == "docker":
+                    continue
                 issues.append(Issue(
                     rule_id="port-unreachable",
                     severity="warning",
@@ -80,7 +96,7 @@ def check_port_exposed_wildcard(state: SystemState, cfg: dict) -> list[Issue]:
 
             issues.append(Issue(
                 rule_id="port-exposed-wildcard",
-                severity="info",
+                severity="warning",
                 service=owner,
                 message=f"Port {port} is listening on all interfaces (0.0.0.0).",
                 hint=f"Consider binding to 127.0.0.1 or a specific interface for security.",

@@ -84,59 +84,87 @@ def _collect(cfg: dict, deep: bool = False) -> SystemState:
     return state
 
 
+def _get_flag(ctx, name: str, local_value):
+    """Get flag value: prefer local (subcommand) if set, else parent context."""
+    if local_value:
+        return local_value
+    return ctx.obj.get(name, False)
+
+
 @click.group(invoke_without_command=True)
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
 @click.option("--quiet", is_flag=True, help="Show only issues, no service list.")
 @click.option("--deep", is_flag=True, help="Deep scan (parse config files).")
 @click.option("--config", "config_path", default=None, help="Path to .nervmap.yml.")
+@click.option("--show-secrets", is_flag=True, help="Include raw secrets in output (dangerous).")
+@click.option("--verbose", "-v", is_flag=True, help="Enable debug logging.")
+@click.option("--no-hooks", is_flag=True, help="Skip shell hook execution.")
 @click.pass_context
-def main(ctx, as_json, quiet, deep, config_path):
+def main(ctx, as_json, quiet, deep, config_path, show_secrets, verbose, no_hooks):
     """NervMap -- Infrastructure cartography CLI."""
+    import logging
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s %(levelname)s: %(message)s")
     ctx.ensure_object(dict)
     ctx.obj["json"] = as_json
     ctx.obj["quiet"] = quiet
     ctx.obj["deep"] = deep
     ctx.obj["config_path"] = config_path
+    ctx.obj["show_secrets"] = show_secrets
+    ctx.obj["no_hooks"] = no_hooks
 
     if ctx.invoked_subcommand is None:
         ctx.invoke(scan)
 
 
 @main.command()
+@click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
+@click.option("--quiet", is_flag=True, help="Show only issues, no service list.")
+@click.option("--deep", is_flag=True, help="Deep scan (parse config files).")
 @click.pass_context
-def scan(ctx):
+def scan(ctx, as_json, quiet, deep):
     """Full infrastructure scan (default)."""
+    import logging
+    logger = logging.getLogger("nervmap.cli")
+
     from nervmap.diagnostics.engine import RuleRunner
     from nervmap.output.console import ConsoleRenderer
     from nervmap.output.json_out import JsonRenderer
     from nervmap.output.hooks import HookRunner
 
     cfg = load_config(ctx.obj.get("config_path"))
-    as_json = ctx.obj["json"]
-    quiet = ctx.obj["quiet"]
-    deep = ctx.obj["deep"]
+    as_json = _get_flag(ctx, "json", as_json)
+    quiet = _get_flag(ctx, "quiet", quiet)
+    deep = _get_flag(ctx, "deep", deep)
+    show_secrets = ctx.obj.get("show_secrets", False)
+    no_hooks = ctx.obj.get("no_hooks", False)
+
+    logger.debug("Starting scan (deep=%s, json=%s, quiet=%s)", deep, as_json, quiet)
 
     t0 = time.monotonic()
     state = _collect(cfg, deep=deep)
+    logger.debug("Discovery complete: %d services, %d listening ports", len(state.services), len(state.listening_ports))
 
     runner = RuleRunner()
     issues = runner.evaluate(state, cfg)
+    logger.debug("Diagnostics complete: %d issues found", len(issues))
 
     elapsed = time.monotonic() - t0
 
     if as_json:
         renderer = JsonRenderer()
-        renderer.render(state, issues, elapsed)
+        renderer.render(state, issues, elapsed, show_secrets=show_secrets)
     else:
         renderer = ConsoleRenderer()
         renderer.render(state, issues, elapsed, quiet=quiet)
 
     # Fire hooks
-    try:
-        hooks = HookRunner(cfg)
-        hooks.fire(state, issues)
-    except Exception:
-        pass
+    if not no_hooks:
+        try:
+            hooks = HookRunner(cfg)
+            hooks.fire(state, issues)
+        except Exception:
+            logger.debug("Hook execution failed", exc_info=True)
 
 
 @main.command()
@@ -148,7 +176,7 @@ def deps(ctx, dot, mermaid):
     cfg = load_config(ctx.obj.get("config_path"))
     state = _collect(cfg)
 
-    if ctx.obj["json"]:
+    if ctx.obj.get("json"):
         click.echo(json_mod.dumps([c.to_dict() for c in state.connections], indent=2))
         return
 
@@ -194,7 +222,7 @@ def issues(ctx, critical):
     if critical:
         all_issues = [i for i in all_issues if i.severity == "critical"]
 
-    if ctx.obj["json"]:
+    if ctx.obj.get("json"):
         click.echo(json_mod.dumps([i.to_dict() for i in all_issues], indent=2))
     else:
         renderer = ConsoleRenderer()

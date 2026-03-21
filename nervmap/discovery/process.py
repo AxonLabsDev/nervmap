@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from pathlib import Path
 
 from nervmap.models import Service
+from nervmap.utils import redact_env
+
+logger = logging.getLogger("nervmap.process")
 
 
 class ProcessCollector:
@@ -38,6 +42,9 @@ class ProcessCollector:
                 continue
 
             name = self._derive_name(cmdline)
+            # Skip docker-proxy: internal Docker port forwarder, not a real service
+            if name == "docker-proxy":
+                continue
             env_vars = self._read_environ(pid)
 
             # Collect all ports for this PID
@@ -53,7 +60,7 @@ class ProcessCollector:
                 health="no_check",
                 metadata={
                     "cmdline": cmdline,
-                    "env": env_vars,
+                    "env": redact_env(env_vars),
                 },
             )
             new_services.append(svc)

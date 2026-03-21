@@ -105,3 +105,69 @@ class TestConsoleRenderer:
         ]
         renderer = ConsoleRenderer()
         renderer.render_issues(issues)
+
+
+class TestRedactEnv:
+    """Tests for secret redaction in output."""
+
+    def test_redact_password_key(self):
+        """Keys containing PASSWORD are redacted."""
+        from nervmap.utils import redact_env, REDACTED
+        env = {"DB_PASSWORD": "s3cret", "APP_NAME": "myapp"}
+        result = redact_env(env)
+        assert result["DB_PASSWORD"] == REDACTED
+        assert result["APP_NAME"] == "myapp"
+
+    def test_redact_token_key(self):
+        """Keys containing TOKEN are redacted."""
+        from nervmap.utils import redact_env, REDACTED
+        env = {"AUTH_TOKEN": "abc123", "PORT": "8080"}
+        result = redact_env(env)
+        assert result["AUTH_TOKEN"] == REDACTED
+        assert result["PORT"] == "8080"
+
+    def test_redact_credential_url(self):
+        """URLs with embedded credentials are redacted."""
+        from nervmap.utils import redact_env, REDACTED
+        env = {"DATABASE_URL": "postgres://user:pass@host:5432/db", "HOME": "/root"}
+        result = redact_env(env)
+        assert result["DATABASE_URL"] == REDACTED
+        assert result["HOME"] == "/root"
+
+    def test_redact_empty_env(self):
+        """Empty env dict is returned as-is."""
+        from nervmap.utils import redact_env
+        assert redact_env({}) == {}
+
+    def test_json_output_no_secrets(self):
+        """JSON output redacts secrets by default."""
+        svc = Service(id="docker:test", name="test", type="docker",
+                      status="running", ports=[8080],
+                      metadata={"env": {"SECRET_KEY": "hidden", "APP": "ok"}})
+        state = SystemState(services=[svc])
+
+        renderer = JsonRenderer()
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            renderer.render(state, [], 1.0)
+
+        output = json.loads(buf.getvalue())
+        env = output["services"][0]["metadata"]["env"]
+        assert env["SECRET_KEY"] == "***REDACTED***"
+        assert env["APP"] == "ok"
+
+    def test_json_output_show_secrets(self):
+        """JSON output shows secrets when --show-secrets is passed."""
+        svc = Service(id="docker:test", name="test", type="docker",
+                      status="running", ports=[8080],
+                      metadata={"env": {"SECRET_KEY": "visible"}})
+        state = SystemState(services=[svc])
+
+        renderer = JsonRenderer()
+        buf = StringIO()
+        with patch("sys.stdout", buf):
+            renderer.render(state, [], 1.0, show_secrets=True)
+
+        output = json.loads(buf.getvalue())
+        env = output["services"][0]["metadata"]["env"]
+        assert env["SECRET_KEY"] == "visible"

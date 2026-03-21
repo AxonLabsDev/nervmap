@@ -102,7 +102,7 @@ class TestDependencyMapper:
 
         declared = [c for c in conns if c.type == "declared"]
         assert len(declared) >= 1
-        assert declared[0].confidence == 0.70
+        assert declared[0].confidence == 1.0
 
     def test_bridge_network_ignored(self):
         """Default bridge network does not create connections."""
