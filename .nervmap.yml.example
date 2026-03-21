@@ -1,0 +1,24 @@
+# NervMap Configuration
+# Copy to .nervmap.yml or ~/.nervmap/config.yml
+
+scan:
+  docker: true
+  systemd: true
+  ports: true
+
+ignore:
+  ports: [22]                    # Don't flag SSH
+  services: ["snap.*"]           # Regex patterns to exclude
+
+timeouts:
+  http: 5                        # seconds
+  tcp: 3
+
+custom_services:
+  - name: "my-llm"
+    port: 8123
+    health_url: "http://127.0.0.1:8123/health"
+    timeout: 10
+
+hooks:
+  on_issue: "~/.nervmap/hooks/notify.sh"

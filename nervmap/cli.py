@@ -1,0 +1,207 @@
+"""NervMap CLI — Click-based command interface."""
+
+from __future__ import annotations
+
+import json as json_mod
+import sys
+import time
+
+import click
+
+from nervmap import __version__
+from nervmap.config import load_config, is_collector_enabled
+from nervmap.models import SystemState
+
+
+def _collect(cfg: dict, deep: bool = False) -> SystemState:
+    """Run all collectors and return aggregated SystemState."""
+    from nervmap.discovery.docker import DockerCollector
+    from nervmap.discovery.systemd import SystemdCollector
+    from nervmap.discovery.ports import PortCollector
+    from nervmap.discovery.process import ProcessCollector
+    from nervmap.topology.mapper import DependencyMapper
+
+    state = SystemState()
+
+    # -- Discovery --
+    if is_collector_enabled(cfg, "docker"):
+        try:
+            dc = DockerCollector()
+            for svc in dc.collect():
+                state.services.append(svc)
+        except Exception:
+            pass
+
+    if is_collector_enabled(cfg, "systemd"):
+        try:
+            sc = SystemdCollector()
+            for svc in sc.collect():
+                state.services.append(svc)
+        except Exception:
+            pass
+
+    if is_collector_enabled(cfg, "ports"):
+        try:
+            pc = PortCollector()
+            port_info = pc.collect()
+            state.listening_ports = port_info.get("listening", {})
+            state.established = port_info.get("established", [])
+        except Exception:
+            pass
+
+    try:
+        proc = ProcessCollector()
+        for svc in proc.collect(state.services, state.listening_ports):
+            state.services.append(svc)
+    except Exception:
+        pass
+
+    # -- Resource info --
+    try:
+        import psutil
+        for part in psutil.disk_partitions():
+            try:
+                usage = psutil.disk_usage(part.mountpoint)
+                state.disk_usage[part.mountpoint] = usage.percent
+            except Exception:
+                pass
+        mem = psutil.virtual_memory()
+        state.memory = {
+            "total": mem.total,
+            "available": mem.available,
+            "percent": mem.percent,
+        }
+    except Exception:
+        pass
+
+    # -- Topology --
+    try:
+        mapper = DependencyMapper(state, cfg)
+        state.connections = mapper.map()
+    except Exception:
+        pass
+
+    return state
+
+
+@click.group(invoke_without_command=True)
+@click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
+@click.option("--quiet", is_flag=True, help="Show only issues, no service list.")
+@click.option("--deep", is_flag=True, help="Deep scan (parse config files).")
+@click.option("--config", "config_path", default=None, help="Path to .nervmap.yml.")
+@click.pass_context
+def main(ctx, as_json, quiet, deep, config_path):
+    """NervMap -- Infrastructure cartography CLI."""
+    ctx.ensure_object(dict)
+    ctx.obj["json"] = as_json
+    ctx.obj["quiet"] = quiet
+    ctx.obj["deep"] = deep
+    ctx.obj["config_path"] = config_path
+
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(scan)
+
+
+@main.command()
+@click.pass_context
+def scan(ctx):
+    """Full infrastructure scan (default)."""
+    from nervmap.diagnostics.engine import RuleRunner
+    from nervmap.output.console import ConsoleRenderer
+    from nervmap.output.json_out import JsonRenderer
+    from nervmap.output.hooks import HookRunner
+
+    cfg = load_config(ctx.obj.get("config_path"))
+    as_json = ctx.obj["json"]
+    quiet = ctx.obj["quiet"]
+    deep = ctx.obj["deep"]
+
+    t0 = time.monotonic()
+    state = _collect(cfg, deep=deep)
+
+    runner = RuleRunner()
+    issues = runner.evaluate(state, cfg)
+
+    elapsed = time.monotonic() - t0
+
+    if as_json:
+        renderer = JsonRenderer()
+        renderer.render(state, issues, elapsed)
+    else:
+        renderer = ConsoleRenderer()
+        renderer.render(state, issues, elapsed, quiet=quiet)
+
+    # Fire hooks
+    try:
+        hooks = HookRunner(cfg)
+        hooks.fire(state, issues)
+    except Exception:
+        pass
+
+
+@main.command()
+@click.option("--dot", is_flag=True, help="Output in Graphviz DOT format.")
+@click.option("--mermaid", is_flag=True, help="Output in Mermaid format.")
+@click.pass_context
+def deps(ctx, dot, mermaid):
+    """Show dependency graph."""
+    cfg = load_config(ctx.obj.get("config_path"))
+    state = _collect(cfg)
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps([c.to_dict() for c in state.connections], indent=2))
+        return
+
+    if dot:
+        click.echo("digraph nervmap {")
+        click.echo('  rankdir=LR;')
+        for c in state.connections:
+            label = f"{c.type} :{c.target_port}" if c.target_port else c.type
+            click.echo(f'  "{c.source}" -> "{c.target}" [label="{label}"];')
+        click.echo("}")
+        return
+
+    if mermaid:
+        click.echo("graph LR")
+        for c in state.connections:
+            label = f"{c.type} :{c.target_port}" if c.target_port else c.type
+            safe_src = c.source.replace(":", "_")
+            safe_tgt = c.target.replace(":", "_")
+            click.echo(f"  {safe_src}[{c.source}] -->|{label}| {safe_tgt}[{c.target}]")
+        return
+
+    # Pretty print
+    from nervmap.output.console import ConsoleRenderer
+    renderer = ConsoleRenderer()
+    renderer.render_deps(state)
+
+
+@main.command()
+@click.option("--critical", is_flag=True, help="Only critical issues.")
+@click.pass_context
+def issues(ctx, critical):
+    """Show only diagnosed issues."""
+    from nervmap.diagnostics.engine import RuleRunner
+    from nervmap.output.console import ConsoleRenderer
+    from nervmap.output.json_out import JsonRenderer
+
+    cfg = load_config(ctx.obj.get("config_path"))
+    state = _collect(cfg)
+
+    runner = RuleRunner()
+    all_issues = runner.evaluate(state, cfg)
+
+    if critical:
+        all_issues = [i for i in all_issues if i.severity == "critical"]
+
+    if ctx.obj["json"]:
+        click.echo(json_mod.dumps([i.to_dict() for i in all_issues], indent=2))
+    else:
+        renderer = ConsoleRenderer()
+        renderer.render_issues(all_issues)
+
+
+@main.command("version")
+def version_cmd():
+    """Show NervMap version."""
+    click.echo(f"nervmap {__version__}")

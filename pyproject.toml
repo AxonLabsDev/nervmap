@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nervmap"
+version = "0.1.0"
+description = "Infrastructure cartography CLI — discover services, map dependencies, diagnose issues."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "AxonLabs"}
+]
+keywords = ["infrastructure", "devops", "docker", "systemd", "diagnostics", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+]
+dependencies = [
+    "click>=8.1",
+    "rich>=13.0",
+    "psutil>=5.9",
+    "docker>=5.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+nervmap = "nervmap.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/axonlabs/nervmap"
+
+[tool.setuptools.packages.find]
+include = ["nervmap*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
