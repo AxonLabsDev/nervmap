@@ -15,6 +15,65 @@ from nervmap.config import load_config, is_collector_enabled
 from nervmap.models import SystemState
 
 
+def _apply_scope(state: SystemState, scope: str | None) -> SystemState:
+    """Filter services by scope pattern.
+
+    Scope formats:
+      - Path to dir containing docker-compose.yml: scans compose project name
+      - Pattern like 'docker:openrag*' or 'systemd:qwen*': glob match on service ID
+      - Simple name like 'openrag': matches anywhere in service ID or name
+    """
+    if not scope:
+        return state
+
+    import copy
+    import fnmatch
+    import os
+
+    filtered_state = copy.deepcopy(state)
+
+    # Check if scope is a path to a docker-compose project
+    compose_project = None
+    if os.path.isdir(scope):
+        compose_file = os.path.join(scope, "docker-compose.yml")
+        if os.path.exists(compose_file):
+            compose_project = os.path.basename(os.path.abspath(scope)).lower().replace("-", "").replace("_", "")
+
+    def _matches(svc) -> bool:
+        sid = svc.id.lower()
+        name = svc.name.lower()
+        pat = scope.lower()
+
+        # Match by compose project directory
+        if compose_project:
+            labels = svc.metadata.get("labels", {})
+            project = labels.get("com.docker.compose.project", "").lower().replace("-", "").replace("_", "")
+            if project == compose_project:
+                return True
+            # Also match container names that start with the dir name
+            if name.startswith(os.path.basename(scope).lower()):
+                return True
+            return False
+
+        # Glob pattern (e.g., 'docker:openrag*')
+        if "*" in pat or "?" in pat:
+            return fnmatch.fnmatch(sid, pat) or fnmatch.fnmatch(name, pat)
+
+        # Simple substring match
+        return pat in sid or pat in name
+
+    filtered_state.services = [s for s in state.services if _matches(s)]
+
+    # Filter connections to only include scoped services
+    scoped_ids = {s.id for s in filtered_state.services}
+    filtered_state.connections = [
+        c for c in state.connections
+        if c.source in scoped_ids or c.target in scoped_ids
+    ]
+
+    return filtered_state
+
+
 def _collect(cfg: dict, deep: bool = False) -> SystemState:
     """Run all collectors and return aggregated SystemState."""
     from nervmap.discovery.docker import DockerCollector
@@ -98,11 +157,12 @@ def _get_flag(ctx, name: str, local_value):
 @click.option("--quiet", is_flag=True, help="Show only issues, no service list.")
 @click.option("--deep", is_flag=True, help="Deep scan (parse config files).")
 @click.option("--config", "config_path", default=None, help="Path to .nervmap.yml.")
+@click.option("--scope", default=None, help="Limit scan to a scope: path to docker-compose dir, or pattern like 'docker:openrag*'.")
 @click.option("--show-secrets", is_flag=True, help="Include raw secrets in output (dangerous).")
 @click.option("--verbose", "-v", is_flag=True, help="Enable debug logging.")
 @click.option("--no-hooks", is_flag=True, help="Skip shell hook execution.")
 @click.pass_context
-def main(ctx, as_json, quiet, deep, config_path, show_secrets, verbose, no_hooks):
+def main(ctx, as_json, quiet, deep, config_path, scope, show_secrets, verbose, no_hooks):
     """NervMap -- Infrastructure cartography CLI."""
     import logging
     if verbose:
@@ -112,6 +172,7 @@ def main(ctx, as_json, quiet, deep, config_path, show_secrets, verbose, no_hooks
     ctx.obj["quiet"] = quiet
     ctx.obj["deep"] = deep
     ctx.obj["config_path"] = config_path
+    ctx.obj["scope"] = scope
     ctx.obj["show_secrets"] = show_secrets
     ctx.obj["no_hooks"] = no_hooks
 
@@ -143,8 +204,13 @@ def scan(ctx, as_json, quiet, deep):
 
     logger.debug("Starting scan (deep=%s, json=%s, quiet=%s)", deep, as_json, quiet)
 
+    scope = ctx.obj.get("scope")
+
     t0 = time.monotonic()
     state = _collect(cfg, deep=deep)
+    if scope:
+        state = _apply_scope(state, scope)
+        logger.debug("Scope '%s': %d services after filtering", scope, len(state.services))
     logger.debug("Discovery complete: %d services, %d listening ports", len(state.services), len(state.listening_ports))
 
     runner = RuleRunner()
@@ -177,6 +243,9 @@ def deps(ctx, dot, mermaid):
     """Show dependency graph."""
     cfg = load_config(ctx.obj.get("config_path"))
     state = _collect(cfg)
+    scope = ctx.obj.get("scope")
+    if scope:
+        state = _apply_scope(state, scope)
 
     if ctx.obj.get("json"):
         click.echo(json_mod.dumps([c.to_dict() for c in state.connections], indent=2))
@@ -217,6 +286,9 @@ def issues(ctx, critical):
 
     cfg = load_config(ctx.obj.get("config_path"))
     state = _collect(cfg)
+    scope = ctx.obj.get("scope")
+    if scope:
+        state = _apply_scope(state, scope)
 
     runner = RuleRunner()
     all_issues = runner.evaluate(state, cfg)
