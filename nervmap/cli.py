@@ -23,26 +23,32 @@ def _apply_scope(state: SystemState, scope: str | None) -> SystemState:
       - Pattern like 'docker:openrag*' or 'systemd:qwen*': glob match on service ID
       - Simple name like 'openrag': matches anywhere in service ID or name
     """
-    if not scope:
-        return state
-
     import copy
     import fnmatch
     import os
+
+    if not scope:
+        return state
+
+    # Normalize scope path (strip trailing slash)
+    scope_normalized = os.path.abspath(scope) if os.path.isdir(scope) else scope
+    scope_basename = os.path.basename(scope_normalized).lower()
 
     filtered_state = copy.deepcopy(state)
 
     # Check if scope is a path to a docker-compose project
     compose_project = None
     if os.path.isdir(scope):
-        compose_file = os.path.join(scope, "docker-compose.yml")
+        compose_file = os.path.join(scope_normalized, "docker-compose.yml")
         if os.path.exists(compose_file):
-            compose_project = os.path.basename(os.path.abspath(scope)).lower().replace("-", "").replace("_", "")
+            compose_project = scope_basename.replace("-", "").replace("_", "")
+
+    pat = scope.lower().strip()
+    is_glob = "*" in pat or "?" in pat
 
     def _matches(svc) -> bool:
         sid = svc.id.lower()
         name = svc.name.lower()
-        pat = scope.lower()
 
         # Match by compose project directory
         if compose_project:
@@ -51,12 +57,12 @@ def _apply_scope(state: SystemState, scope: str | None) -> SystemState:
             if project == compose_project:
                 return True
             # Also match container names that start with the dir name
-            if name.startswith(os.path.basename(scope).lower()):
+            if scope_basename and name.startswith(scope_basename):
                 return True
             return False
 
         # Glob pattern (e.g., 'docker:openrag*')
-        if "*" in pat or "?" in pat:
+        if is_glob:
             return fnmatch.fnmatch(sid, pat) or fnmatch.fnmatch(name, pat)
 
         # Simple substring match
@@ -64,11 +70,27 @@ def _apply_scope(state: SystemState, scope: str | None) -> SystemState:
 
     filtered_state.services = [s for s in state.services if _matches(s)]
 
+    if not filtered_state.services:
+        logger.warning("No services matched scope '%s'", scope)
+
     # Filter connections to only include scoped services
     scoped_ids = {s.id for s in filtered_state.services}
     filtered_state.connections = [
         c for c in state.connections
         if c.source in scoped_ids or c.target in scoped_ids
+    ]
+
+    # Filter listening_ports and established to scoped services only
+    scoped_ports = set()
+    for svc in filtered_state.services:
+        scoped_ports.update(svc.ports)
+    filtered_state.listening_ports = {
+        p: addr for p, addr in state.listening_ports.items()
+        if p in scoped_ports
+    }
+    filtered_state.established = [
+        e for e in state.established
+        if e.get("local_port") in scoped_ports or e.get("remote_port") in scoped_ports
     ]
 
     return filtered_state
