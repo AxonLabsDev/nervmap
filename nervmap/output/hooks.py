@@ -1,6 +1,8 @@
 """Shell hook runner for NervMap events."""
 
 from __future__ import annotations
+import logging
+logger = logging.getLogger("nervmap.hooks")
 
 import json
 import os
@@ -82,4 +84,4 @@ class HookRunner:
                 capture_output=True,
             )
         except Exception:
-            pass
+            logger.debug("Hook execution error", exc_info=True)

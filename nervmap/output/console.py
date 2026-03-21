@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich import box
 
-from nervmap.models import SystemState, Issue, Connection
+from nervmap.models import SystemState, Issue
 from nervmap.topology.fingerprints import ServiceFingerprinter
 
 

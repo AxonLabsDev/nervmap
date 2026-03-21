@@ -1,12 +1,13 @@
 """Port discovery via /proc/net/tcp and ss."""
 
 from __future__ import annotations
+import logging
+logger = logging.getLogger("nervmap.ports")
 
 import os
 import subprocess
 import struct
 import re
-from pathlib import Path
 
 
 class PortCollector:
@@ -22,8 +23,8 @@ class PortCollector:
             l, e = self._parse_proc_net()
             listening.update(l)
             established.extend(e)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Port collection error: %s", _exc)
 
         # Fallback/supplement with ss
         if not listening:
@@ -31,8 +32,8 @@ class PortCollector:
                 l, e = self._parse_ss()
                 listening.update(l)
                 established.extend(e)
-            except Exception:
-                pass
+            except Exception as _exc:
+                logger.debug("Port parse error", exc_info=True)
 
         return {"listening": listening, "established": established}
 
@@ -67,7 +68,7 @@ class PortCollector:
                             "remote_addr": remote_addr,
                             "remote_port": remote_port,
                         })
-            except Exception:
+            except Exception as _exc:
                 continue
 
         return listening, established
@@ -143,8 +144,8 @@ class PortCollector:
                         addr = match.group(1)
                         port = int(match.group(2))
                         listening[port] = addr
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Port collection error: %s", _exc)
 
         try:
             result = subprocess.run(
@@ -169,7 +170,7 @@ class PortCollector:
                             "remote_addr": rm.group(1),
                             "remote_port": int(rm.group(2)),
                         })
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Port collection error: %s", _exc)
 
         return listening, established

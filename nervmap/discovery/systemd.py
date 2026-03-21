@@ -1,6 +1,8 @@
 """Systemd service discovery via systemctl."""
 
 from __future__ import annotations
+import logging
+logger = logging.getLogger("nervmap.systemd")
 
 import json as json_mod
 import subprocess
@@ -34,7 +36,7 @@ class SystemdCollector:
             if result.returncode == 0 and result.stdout.strip().startswith("["):
                 return json_mod.loads(result.stdout)
         except Exception:
-            pass
+            logger.debug("Systemd parse error", exc_info=True)
 
         # Fallback: text parsing
         try:
@@ -130,5 +132,5 @@ class SystemdCollector:
                 pid = int(result.stdout.strip())
                 return pid if pid > 0 else None
         except Exception:
-            pass
+            logger.debug("Systemd PID lookup error", exc_info=True)
         return None

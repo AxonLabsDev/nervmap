@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
-from pathlib import Path
 
 from nervmap.models import Service
 from nervmap.utils import redact_env
@@ -115,7 +113,7 @@ class ProcessCollector:
                 except (OSError, PermissionError):
                     continue
         except Exception:
-            pass
+            logger.debug("Process scan error", exc_info=True)
 
         # Step 3: Map port -> pid
         result: dict[int, int] = {}

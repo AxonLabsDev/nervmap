@@ -1,6 +1,8 @@
 """Configuration loader for .nervmap.yml."""
 
 from __future__ import annotations
+import logging
+logger = logging.getLogger("nervmap.config")
 
 from pathlib import Path
 from typing import Any
@@ -54,7 +56,8 @@ def load_config(path: str | None = None) -> dict[str, Any]:
                 with open(candidate, "r") as f:
                     user_cfg = yaml.safe_load(f) or {}
                 return _deep_merge(DEFAULTS, user_cfg)
-        except Exception:
+        except Exception as _exc:
+            logger.warning("Failed to parse config %s: %s", candidate, _exc)
             continue
 
     return DEFAULTS.copy()

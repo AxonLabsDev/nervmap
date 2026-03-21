@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json as json_mod
 import logging
-import sys
 import time
 
 import click

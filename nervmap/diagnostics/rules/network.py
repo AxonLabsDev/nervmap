@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import socket
 
 from nervmap.models import SystemState, Issue
@@ -148,6 +147,6 @@ def check_connection_refused(state: SystemState, cfg: dict) -> list[Issue]:
                     impact=[conn.source, conn.target],
                 ))
         except Exception:
-            pass
+            logger.debug("Connection check error", exc_info=True)
 
     return issues

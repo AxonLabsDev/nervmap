@@ -18,7 +18,7 @@ class DockerCollector:
             import docker as docker_lib
             self._client = docker_lib.from_env(timeout=5)
             self._client.ping()
-        except Exception:
+        except Exception as _exc:
             logger.debug("Docker not available", exc_info=True)
             self._client = None
 
@@ -29,14 +29,14 @@ class DockerCollector:
         services: list[Service] = []
         try:
             containers = self._client.containers.list(all=True)
-        except Exception:
+        except Exception as _exc:
             logger.debug("Failed to list Docker containers", exc_info=True)
             return []
 
         for ctr in containers:
             try:
                 services.append(self._to_service(ctr))
-            except Exception:
+            except Exception as _exc:
                 continue
 
         return services
@@ -50,8 +50,8 @@ class DockerCollector:
         try:
             info = ctr.attrs
             pid = info.get("State", {}).get("Pid")
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Docker field error: %s", _exc)
 
         # Metadata
         meta: dict = {
@@ -65,20 +65,20 @@ class DockerCollector:
             net_settings = ctr.attrs.get("NetworkSettings", {})
             networks = list(net_settings.get("Networks", {}).keys())
             meta["networks"] = networks
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Docker field error: %s", _exc)
 
         # Restart count
         try:
             meta["restart_count"] = ctr.attrs.get("RestartCount", 0)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Docker field error: %s", _exc)
 
         # Exit code
         try:
             meta["exit_code"] = ctr.attrs.get("State", {}).get("ExitCode", 0)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Docker field error: %s", _exc)
 
         # Environment variables (useful for dependency discovery)
         try:
@@ -89,14 +89,14 @@ class DockerCollector:
                     k, v = e.split("=", 1)
                     env_dict[k] = v
             meta["env"] = redact_env(env_dict)
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Docker field error: %s", _exc)
 
         # Labels
         try:
             meta["labels"] = ctr.labels or {}
-        except Exception:
-            pass
+        except Exception as _exc:
+            logger.debug("Docker field error: %s", _exc)
 
         return Service(
             id=f"docker:{name}",
@@ -140,7 +140,7 @@ class DockerCollector:
                     p = int(container_port.split("/")[0])
                     internal_ports.append(p)
                 except (ValueError, IndexError):
-                    pass
+                    logger.debug("Docker field error: %s", _exc)
                 if bindings:
                     for b in bindings:
                         try:
@@ -148,9 +148,9 @@ class DockerCollector:
                             if hp:
                                 host_ports.append(hp)
                         except (ValueError, TypeError):
-                            pass
-        except Exception:
-            pass
+                            logger.debug("Docker field error: %s", _exc)
+        except Exception as _exc:
+            logger.debug("Docker field error: %s", _exc)
         # Only return host-mapped ports. Internal-only ports are NOT on the host.
         # Returning internal ports as fallback causes false port-conflicts.
         return sorted(set(host_ports))
@@ -167,5 +167,5 @@ class DockerCollector:
             elif status == "unhealthy":
                 return "unhealthy"
             return "no_check"
-        except Exception:
+        except Exception as _exc:
             return "no_check"

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from nervmap.models import SystemState, Connection, Service
+from nervmap.models import SystemState, Connection
 
 
 # Env vars that typically point to a dependency
@@ -147,7 +147,7 @@ class DependencyMapper:
             try:
                 return int(m.group(1))
             except ValueError:
-                pass
+                logger.debug("Env var parse error", exc_info=True)
         return None
 
     @staticmethod
