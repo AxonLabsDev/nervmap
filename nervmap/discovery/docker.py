@@ -151,10 +151,9 @@ class DockerCollector:
                             pass
         except Exception:
             pass
-        # Store internal ports in a class var for metadata access
-        ctr._nervmap_internal_ports = sorted(set(internal_ports))
-        # Return only host-mapped ports for service.ports
-        return sorted(set(host_ports)) if host_ports else sorted(set(internal_ports))
+        # Only return host-mapped ports. Internal-only ports are NOT on the host.
+        # Returning internal ports as fallback causes false port-conflicts.
+        return sorted(set(host_ports))
 
     @staticmethod
     def _extract_health(ctr) -> str:

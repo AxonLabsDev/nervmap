@@ -124,10 +124,19 @@ def check_connection_refused(state: SystemState, cfg: dict) -> list[Issue]:
             continue
         checked.add(port)
 
+        # Use actual bind address if known, otherwise try localhost
+        bind_addr = state.listening_ports.get(port, "127.0.0.1")
+        if bind_addr in ("::", "0.0.0.0"):
+            bind_addr = "127.0.0.1"
+
+        # Skip if port is in listening_ports — it's already confirmed listening
+        if port in state.listening_ports:
+            continue
+
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.settimeout(min(timeout, 2))
-            result = s.connect_ex(("127.0.0.1", port))
+            result = s.connect_ex((bind_addr, port))
             s.close()
             if result != 0:
                 issues.append(Issue(
