@@ -31,7 +31,6 @@ def get_all_rules() -> list[RuleFunc]:
         check_dependency_down,
         check_env_port_mismatch,
         check_circular_dependency,
-        check_circular_dependency,
     )
     from nervmap.diagnostics.rules.resources import (
         check_disk_pressure,

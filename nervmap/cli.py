@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json as json_mod
+import logging
 import sys
 import time
 
 import click
+
+logger = logging.getLogger("nervmap")
 
 from nervmap import __version__
 from nervmap.config import load_config, is_collector_enabled
@@ -30,7 +33,7 @@ def _collect(cfg: dict, deep: bool = False) -> SystemState:
             for svc in dc.collect():
                 state.services.append(svc)
         except Exception:
-            pass
+            logger.debug("Docker collector failed", exc_info=True)
 
     if is_collector_enabled(cfg, "systemd"):
         try:
@@ -38,7 +41,7 @@ def _collect(cfg: dict, deep: bool = False) -> SystemState:
             for svc in sc.collect():
                 state.services.append(svc)
         except Exception:
-            pass
+            logger.debug("Systemd collector failed", exc_info=True)
 
     if is_collector_enabled(cfg, "ports"):
         try:
@@ -47,14 +50,14 @@ def _collect(cfg: dict, deep: bool = False) -> SystemState:
             state.listening_ports = port_info.get("listening", {})
             state.established = port_info.get("established", [])
         except Exception:
-            pass
+            logger.debug("Port collector failed", exc_info=True)
 
     try:
         proc = ProcessCollector()
         for svc in proc.collect(state.services, state.listening_ports):
             state.services.append(svc)
     except Exception:
-        pass
+        logger.debug("Process collector failed", exc_info=True)
 
     # -- Resource info --
     try:
@@ -64,7 +67,7 @@ def _collect(cfg: dict, deep: bool = False) -> SystemState:
                 usage = psutil.disk_usage(part.mountpoint)
                 state.disk_usage[part.mountpoint] = usage.percent
             except Exception:
-                pass
+                logger.debug("Disk usage failed for %s", part.mountpoint)
         mem = psutil.virtual_memory()
         state.memory = {
             "total": mem.total,
@@ -72,21 +75,21 @@ def _collect(cfg: dict, deep: bool = False) -> SystemState:
             "percent": mem.percent,
         }
     except Exception:
-        pass
+        logger.debug("Resource info collection failed", exc_info=True)
 
     # -- Topology --
     try:
         mapper = DependencyMapper(state, cfg)
         state.connections = mapper.map()
     except Exception:
-        pass
+        logger.debug("Topology mapper failed", exc_info=True)
 
     return state
 
 
 def _get_flag(ctx, name: str, local_value):
-    """Get flag value: prefer local (subcommand) if set, else parent context."""
-    if local_value:
+    """Get flag value: prefer local (subcommand) if explicitly set, else parent context."""
+    if local_value is not None and local_value is not False and local_value != 0:
         return local_value
     return ctx.obj.get(name, False)
 

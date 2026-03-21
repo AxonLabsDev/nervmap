@@ -37,9 +37,9 @@ class RuleRunner:
                 continue
             filtered.append(svc)
 
-        # Don't mutate original state — work on a copy
+        # Don't mutate original state — deep copy to avoid shared references
         import copy
-        new_state = copy.copy(state)
+        new_state = copy.deepcopy(state)
         new_state.services = filtered
         return new_state
 

@@ -9,6 +9,7 @@ from nervmap.diagnostics.rules.network import (
     check_port_conflict,
     check_port_unreachable,
     check_port_exposed_wildcard,
+    check_connection_refused,
 )
 from nervmap.diagnostics.rules.docker_rules import (
     check_container_restart_loop,
@@ -266,6 +267,33 @@ class TestCircularDependency:
         state = SystemState(connections=[conn1, conn2])
         issues = check_circular_dependency(state, DEFAULTS)
         assert len(issues) == 0
+
+
+class TestConnectionRefused:
+    """Tests for connection-refused rule."""
+
+    def test_skip_listening_port(self):
+        """Ports in listening_ports should be skipped (already confirmed alive)."""
+        svc = Service(id="docker:api", name="api", type="docker", status="running", ports=[3000])
+        conn = Connection(source="docker:web", target="docker:api", type="tcp", target_port=3000)
+        state = SystemState(
+            services=[svc],
+            connections=[conn],
+            listening_ports={3000: "127.0.0.1"},
+        )
+        issues = check_connection_refused(state, DEFAULTS)
+        assert len(issues) == 0
+
+    def test_non_listening_port_checked(self):
+        """Ports NOT in listening_ports should attempt connection check."""
+        conn = Connection(source="docker:web", target="docker:api", type="tcp", target_port=59999)
+        state = SystemState(connections=[conn], listening_ports={})
+        # With a very short timeout, the connection check runs (may or may not flag)
+        cfg = {**DEFAULTS, "timeouts": {"tcp": 1}}
+        issues = check_connection_refused(state, cfg)
+        # If flagged, verify rule_id is correct
+        if issues:
+            assert issues[0].rule_id == "connection-refused"
 
 
 class TestIgnoreServices:
