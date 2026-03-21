@@ -223,6 +223,67 @@ class TestResourceRules:
         assert len(issues) == 0
 
 
+class TestEnvPortMismatchDockerHostname:
+    """Tests for Docker hostname skip in env-port-mismatch."""
+
+    def test_docker_hostname_skipped(self):
+        """Docker-internal URLs (hostname, not IP) should NOT trigger warning."""
+        svc = Service(id="docker:app", name="app", type="docker",
+                      status="running",
+                      metadata={"env": {
+                          "DOCLING_URL": "http://docling-serve:5001",
+                          "LANGFLOW_URL": "http://langflow:7860",
+                      }})
+        state = SystemState(services=[svc], listening_ports={})
+        issues = check_env_port_mismatch(state, DEFAULTS)
+        assert len(issues) == 0
+
+    def test_ip_url_still_flagged(self):
+        """URLs pointing to an IP address should still trigger warning."""
+        svc = Service(id="docker:app", name="app", type="docker",
+                      status="running",
+                      metadata={"env": {
+                          "OLLAMA_ENDPOINT": "http://192.168.1.1:11435",
+                      }})
+        state = SystemState(services=[svc], listening_ports={})
+        issues = check_env_port_mismatch(state, DEFAULTS)
+        assert len(issues) == 1
+        assert issues[0].rule_id == "env-port-mismatch"
+
+    def test_localhost_still_flagged(self):
+        """URLs pointing to localhost should still trigger warning."""
+        svc = Service(id="docker:app", name="app", type="docker",
+                      status="running",
+                      metadata={"env": {
+                          "DB_URL": "http://localhost:5432",
+                      }})
+        state = SystemState(services=[svc], listening_ports={})
+        issues = check_env_port_mismatch(state, DEFAULTS)
+        assert len(issues) == 1
+
+    def test_auth_url_docker_hostname_skipped(self):
+        """Docker URLs with user:pass@hostname should still be skipped."""
+        svc = Service(id="docker:app", name="app", type="docker",
+                      status="running",
+                      metadata={"env": {
+                          "DATABASE_URL": "postgres://user:pass@db-service:5432/mydb",
+                      }})
+        state = SystemState(services=[svc], listening_ports={})
+        issues = check_env_port_mismatch(state, DEFAULTS)
+        assert len(issues) == 0
+
+    def test_auth_url_ip_still_flagged(self):
+        """URLs with user:pass@IP should still be flagged."""
+        svc = Service(id="docker:app", name="app", type="docker",
+                      status="running",
+                      metadata={"env": {
+                          "DATABASE_URL": "postgres://user:pass@127.0.0.1:5432/mydb",
+                      }})
+        state = SystemState(services=[svc], listening_ports={})
+        issues = check_env_port_mismatch(state, DEFAULTS)
+        assert len(issues) == 1
+
+
 class TestRuleRunner:
     """Tests for the rule runner engine."""
 

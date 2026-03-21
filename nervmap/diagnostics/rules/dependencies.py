@@ -41,8 +41,22 @@ def check_env_port_mismatch(state: SystemState, cfg: dict) -> list[Issue]:
             continue
 
         for key, value in env.items():
+            val_str = str(value)
+
+            # Skip Docker-internal URLs: hostname is a service name, not reachable from host
+            # Handles: ://host:port, ://user:pass@host:port, ://user@host:port
+            host_match = re.search(r'://(?:[^@/]*@)?([^:/]+):(\d{2,5})', val_str)
+            if host_match:
+                hostname = host_match.group(1)
+                # If hostname is a Docker service name (not IP, not localhost), skip
+                is_ip = re.match(r'^(\d{1,3}\.){3}\d{1,3}$', hostname)
+                # Note: IPv6 loopback [::1] is not matched by the regex (colons in hostname)
+                is_local = hostname in ('localhost', 'ip6-localhost')
+                if hostname and not is_ip and not is_local:
+                    continue
+
             # Look for port references in env vars
-            port_match = re.search(r':(\d{2,5})(?:/|$|\?)', str(value))
+            port_match = re.search(r':(\d{2,5})(?:/|$|\?)', val_str)
             if not port_match:
                 continue
 
