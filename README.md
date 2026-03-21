@@ -39,23 +39,36 @@ pipx install nervmap
 ## Quick Start
 
 ```bash
-nervmap                      # Full scan, colored output
-nervmap scan --json          # Machine-readable JSON
-nervmap scan --quiet         # Issues only
-nervmap deps                 # Dependency graph
-nervmap deps --dot           # Graphviz DOT export
-nervmap deps --mermaid       # Mermaid diagram export
-nervmap issues               # All issues
-nervmap issues --critical    # Critical only
-nervmap scan --verbose       # Debug logging
-nervmap scan --no-hooks      # Disable shell hooks
+nervmap                              # Full scan, colored output
+nervmap scan --json                  # Machine-readable JSON
+nervmap scan --quiet                 # Issues only
+nervmap --scope myapp scan         # Scan only services matching "myapp"
+nervmap --scope "docker:next*" scan  # Glob pattern on service IDs
+nervmap --scope /opt/myproject scan  # Scope to a docker-compose project dir
+nervmap deps                         # Dependency graph
+nervmap deps --dot                   # Graphviz DOT export
+nervmap deps --mermaid               # Mermaid diagram export
+nervmap issues                       # All issues
+nervmap issues --critical            # Critical only
+nervmap scan --verbose               # Debug logging
+nervmap scan --no-hooks              # Disable shell hooks
 ```
 
 ---
 
 ## Discovery
 
-NervMap auto-detects services from 4 sources simultaneously:
+NervMap auto-detects services from 4 sources simultaneously.
+
+Use `--scope` to limit the scan to a specific project:
+
+| Scope Format | Example | What It Matches |
+|-------------|---------|-----------------|
+| Substring | `--scope myapp` | Any service with "myapp" in name or ID |
+| Glob pattern | `--scope "docker:next*"` | Service IDs matching the glob |
+| Compose directory | `--scope /opt/myproject` | Services from that docker-compose project |
+
+All commands (`scan`, `deps`, `issues`) respect `--scope`.
 
 | Source | What It Finds | How |
 |--------|--------------|-----|

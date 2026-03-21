@@ -4,10 +4,10 @@
 
 ## Status: v0.1.0 MVP — COMPLETE (10/10 review score)
 
-- 60 tests passing
-- 0% false positive rate (verified on 263-service production server)
+- 71 tests passing
+- 0% false positive rate
 - 0.6s scan time
-- 7 review/fix cycles (6.5 -> 7.0 -> 7.5 -> 9.2 -> 9.5 -> 10)
+- --scope flag for project-level filtering
 
 ## Architecture
 
@@ -74,6 +74,15 @@ CLI Entry Point (Click)
 - `disk-pressure` — filesystem > 90% (snap/boot excluded)
 - `memory-oom-risk` — system memory > 80%
 
+## Scope Filtering
+
+`--scope` limits scan to a subset of services:
+- Substring match: `--scope myapp`
+- Glob pattern: `--scope "docker:next*"`
+- Docker-compose directory: `--scope /opt/myproject`
+
+Filters services, connections, listening_ports, and established data. All commands (scan, deps, issues) respect scope.
+
 ## Key Design Decisions
 
 1. **Host-mapped ports only** for Docker — internal container ports are NOT on the host
@@ -82,6 +91,7 @@ CLI Entry Point (Click)
 4. **No LLM in core** — deterministic rules only, LLM as optional plugin
 5. **Zero config by default** — .nervmap.yml is optional
 6. **All error paths logged** — no bare except:pass anywhere
+7. **Scope = generic** — no hardcoded project names, works on any server
 
 ## Roadmap
 
