@@ -51,7 +51,7 @@ class DockerCollector:
             info = ctr.attrs
             pid = info.get("State", {}).get("Pid")
         except Exception as _exc:
-            logger.debug("Docker field error: %s", _exc)
+            logger.debug("Docker field error: %s", exc)
 
         # Metadata
         meta: dict = {
@@ -66,19 +66,19 @@ class DockerCollector:
             networks = list(net_settings.get("Networks", {}).keys())
             meta["networks"] = networks
         except Exception as _exc:
-            logger.debug("Docker field error: %s", _exc)
+            logger.debug("Docker field error: %s", exc)
 
         # Restart count
         try:
             meta["restart_count"] = ctr.attrs.get("RestartCount", 0)
         except Exception as _exc:
-            logger.debug("Docker field error: %s", _exc)
+            logger.debug("Docker field error: %s", exc)
 
         # Exit code
         try:
             meta["exit_code"] = ctr.attrs.get("State", {}).get("ExitCode", 0)
         except Exception as _exc:
-            logger.debug("Docker field error: %s", _exc)
+            logger.debug("Docker field error: %s", exc)
 
         # Environment variables (useful for dependency discovery)
         try:
@@ -90,13 +90,13 @@ class DockerCollector:
                     env_dict[k] = v
             meta["env"] = redact_env(env_dict)
         except Exception as _exc:
-            logger.debug("Docker field error: %s", _exc)
+            logger.debug("Docker field error: %s", exc)
 
         # Labels
         try:
             meta["labels"] = ctr.labels or {}
         except Exception as _exc:
-            logger.debug("Docker field error: %s", _exc)
+            logger.debug("Docker field error: %s", exc)
 
         return Service(
             id=f"docker:{name}",
@@ -139,18 +139,18 @@ class DockerCollector:
                 try:
                     p = int(container_port.split("/")[0])
                     internal_ports.append(p)
-                except (ValueError, IndexError):
-                    logger.debug("Docker field error: %s", _exc)
+                except (ValueError, IndexError) as exc:
+                    logger.debug("Docker field error: %s", exc)
                 if bindings:
                     for b in bindings:
                         try:
                             hp = int(b.get("HostPort", 0))
                             if hp:
                                 host_ports.append(hp)
-                        except (ValueError, TypeError):
-                            logger.debug("Docker field error: %s", _exc)
+                        except (ValueError, TypeError) as exc:
+                            logger.debug("Docker field error: %s", exc)
         except Exception as _exc:
-            logger.debug("Docker field error: %s", _exc)
+            logger.debug("Docker field error: %s", exc)
         # Only return host-mapped ports. Internal-only ports are NOT on the host.
         # Returning internal ports as fallback causes false port-conflicts.
         return sorted(set(host_ports))

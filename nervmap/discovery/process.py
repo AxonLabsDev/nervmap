@@ -146,7 +146,7 @@ class ProcessCollector:
                     k, v = decoded.split("=", 1)
                     env[k] = v
         except (OSError, PermissionError):
-            pass
+            logger.debug("Cannot read environ for PID (permission denied)")
         return env
 
     @staticmethod

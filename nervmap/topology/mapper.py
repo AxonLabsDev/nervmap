@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from nervmap.models import SystemState, Connection
+import logging
+logger = logging.getLogger("nervmap.mapper")
 
 
 # Env vars that typically point to a dependency

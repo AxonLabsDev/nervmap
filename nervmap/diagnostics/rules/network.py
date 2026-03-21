@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import socket
+import logging
+logger = logging.getLogger("nervmap.rules.network")
 
 from nervmap.models import SystemState, Issue
 from nervmap.config import get_ignored_ports
