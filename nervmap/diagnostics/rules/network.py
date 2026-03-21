@@ -34,6 +34,12 @@ def check_port_conflict(state: SystemState, cfg: dict) -> list[Issue]:
             if has_docker and has_proxy:
                 continue
 
+            # Skip false positive: Docker containers on separate networks sharing internal ports
+            # Only flag if the port is actually mapped to the host
+            docker_owners = [o for o in owners if state.service_by_id(o) and state.service_by_id(o).type == "docker"]
+            if len(docker_owners) == len(owners) and port not in state.listening_ports:
+                continue
+
             issues.append(Issue(
                 rule_id="port-conflict",
                 severity="critical",

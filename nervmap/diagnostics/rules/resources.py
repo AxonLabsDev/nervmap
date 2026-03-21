@@ -9,7 +9,14 @@ def check_disk_pressure(state: SystemState, cfg: dict) -> list[Issue]:
     """Detect filesystems over 90% usage."""
     issues: list[Issue] = []
 
+    # Mounts to exclude (read-only, virtual, always 100%)
+    excluded_prefixes = ("/snap/", "/snap", "/boot/efi", "/boot")
+
     for mount, percent in state.disk_usage.items():
+        # Skip snap squashfs mounts (always 100% by design)
+        if any(mount.startswith(p) for p in excluded_prefixes):
+            continue
+
         if percent >= 95:
             severity = "critical"
         elif percent >= 90:

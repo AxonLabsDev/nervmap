@@ -58,7 +58,7 @@ def check_env_port_mismatch(state: SystemState, cfg: dict) -> list[Issue]:
                     severity="warning",
                     service=svc.id,
                     message=f"{svc.name} env {key} references port {port}, but nothing is listening there.",
-                    hint=f"Verify the value of {key} ({value}) or start the expected service on port {port}.",
+                    hint=f"Verify the value of {key} or start the expected service on port {port}.",
                     impact=[svc.id],
                 ))
 
@@ -74,18 +74,17 @@ def check_circular_dependency(state: SystemState, cfg: dict) -> list[Issue]:
     for conn in state.connections:
         graph.setdefault(conn.source, set()).add(conn.target)
 
-    # DFS cycle detection
+    # DFS cycle detection with canonical deduplication
     visited: set[str] = set()
     in_stack: set[str] = set()
-    cycles_found: set[tuple[str, ...]] = set()
+    cycles_found: set[frozenset[str]] = set()
 
     def _dfs(node: str, path: list[str]):
         if node in in_stack:
-            # Found cycle — extract it
             cycle_start = path.index(node)
-            cycle = tuple(sorted(path[cycle_start:]))
-            if cycle not in cycles_found:
-                cycles_found.add(cycle)
+            cycle_nodes = frozenset(path[cycle_start:])
+            if cycle_nodes not in cycles_found:
+                cycles_found.add(cycle_nodes)
                 cycle_path = path[cycle_start:] + [node]
                 chain = " -> ".join(cycle_path)
                 issues.append(Issue(

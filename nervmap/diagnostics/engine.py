@@ -37,8 +37,11 @@ class RuleRunner:
                 continue
             filtered.append(svc)
 
-        state.services = filtered
-        return state
+        # Don't mutate original state — work on a copy
+        import copy
+        new_state = copy.copy(state)
+        new_state.services = filtered
+        return new_state
 
     def evaluate(self, state: SystemState, cfg: dict) -> list[Issue]:
         # Filter out ignored services before running diagnostics

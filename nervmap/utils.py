@@ -12,7 +12,7 @@ _SENSITIVE_KEY_PATTERNS = re.compile(
 
 # URL with embedded credentials: scheme://user:pass@host
 _CREDENTIAL_URL_PATTERN = re.compile(
-    r"://[^/@]+:[^/@]+@",
+    r"://[^/@]*:[^/@]+@",
 )
 
 REDACTED = "***REDACTED***"
