@@ -144,3 +144,30 @@ class TestProcessCollector:
         pc = ProcessCollector()
         result = pc.collect([], {})
         assert isinstance(result, list)
+
+
+class TestPortCollectorIPv6:
+    """Tests for IPv6 address decoding."""
+
+    def test_decode_ipv6_loopback(self):
+        """::1 decodes correctly."""
+        pc = PortCollector()
+        addr, port = pc._decode_addr("00000000000000000000000001000000:1F90", ipv6=True)
+        assert addr == "::1"
+        assert port == 8080
+
+    def test_decode_ipv6_wildcard(self):
+        """:: (all interfaces) decodes correctly."""
+        pc = PortCollector()
+        addr, port = pc._decode_addr("00000000000000000000000000000000:0050", ipv6=True)
+        assert addr == "::"
+        assert port == 80
+
+    def test_decode_ipv4_mapped_ipv6(self):
+        """::ffff:127.0.0.1 decodes to 127.0.0.1."""
+        pc = PortCollector()
+        # Real /proc/net/tcp6 format: 4 little-endian 32-bit words
+        # ::ffff:127.0.0.1 stored as: 00000000 00000000 FFFF0000 0100007F
+        addr, port = pc._decode_addr("0000000000000000FFFF00000100007F:0050", ipv6=True)
+        assert addr == "127.0.0.1"
+        assert port == 80

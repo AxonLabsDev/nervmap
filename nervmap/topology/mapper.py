@@ -47,17 +47,109 @@ class DependencyMapper:
     def map(self) -> list[Connection]:
         connections: list[Connection] = []
 
-        # 1. TCP established connections
+        # 1. Docker Compose depends_on (100% confidence, declared)
+        connections.extend(self._from_compose_depends_on())
+
+        # 2. TCP established connections
         connections.extend(self._from_established())
 
-        # 2. Environment variable inference
+        # 3. Environment variable inference
         connections.extend(self._from_env_vars())
 
-        # 3. Docker network shared membership
+        # 4. Docker network shared membership
         connections.extend(self._from_docker_networks())
 
         # Deduplicate
         return self._deduplicate(connections)
+
+    def _from_compose_depends_on(self) -> list[Connection]:
+        """Extract declared dependencies from docker-compose.yml files.
+
+        Searches for docker-compose.yml in common locations and parses
+        depends_on directives. Confidence: 1.0 (declared by developer).
+        """
+        import os
+        import yaml
+
+        conns: list[Connection] = []
+
+        # Collect compose project dirs from container labels
+        compose_dirs: set[str] = set()
+        for svc in self.state.services:
+            if svc.type != "docker":
+                continue
+            labels = svc.metadata.get("labels", {})
+            workdir = labels.get("com.docker.compose.project.working_dir", "")
+            if workdir and os.path.isdir(workdir):
+                compose_dirs.add(workdir)
+
+        # Build service name -> service ID mapping for this state
+        name_to_id: dict[str, str] = {}
+        for svc in self.state.services:
+            name_to_id[svc.name.lower()] = svc.id
+            # Also map without compose project prefix (e.g., "openrag-backend" -> "backend")
+            if "-" in svc.name:
+                short = svc.name.rsplit("-", 1)[-1].lower()
+                if short not in name_to_id:
+                    name_to_id[short] = svc.id
+
+        for compose_dir in compose_dirs:
+            for filename in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+                compose_path = os.path.join(compose_dir, filename)
+                if not os.path.isfile(compose_path):
+                    continue
+
+                try:
+                    with open(compose_path, "r") as f:
+                        compose = yaml.safe_load(f) or {}
+                except Exception:
+                    logger.debug("Failed to parse %s", compose_path, exc_info=True)
+                    continue
+
+                services = compose.get("services", {})
+                if not isinstance(services, dict):
+                    continue
+
+                project_name = os.path.basename(compose_dir).lower()
+
+                for svc_name, svc_def in services.items():
+                    if not isinstance(svc_def, dict):
+                        continue
+
+                    depends = svc_def.get("depends_on", [])
+                    # depends_on can be a list or a dict
+                    if isinstance(depends, dict):
+                        dep_names = list(depends.keys())
+                    elif isinstance(depends, list):
+                        dep_names = depends
+                    else:
+                        continue
+
+                    # Resolve source service ID
+                    source_id = (
+                        name_to_id.get(f"{project_name}-{svc_name}".lower())
+                        or name_to_id.get(svc_name.lower())
+                    )
+                    if not source_id:
+                        continue
+
+                    for dep_name in dep_names:
+                        target_id = (
+                            name_to_id.get(f"{project_name}-{dep_name}".lower())
+                            or name_to_id.get(dep_name.lower())
+                        )
+                        if target_id and target_id != source_id:
+                            conns.append(Connection(
+                                source=source_id,
+                                target=target_id,
+                                type="declared",
+                                confidence=1.0,
+                            ))
+
+                break  # Only parse the first compose file found per dir
+
+        logger.debug("Compose depends_on: found %d declared connections", len(conns))
+        return conns
 
     def _from_established(self) -> list[Connection]:
         """Match established connections to known services."""

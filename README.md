@@ -6,7 +6,7 @@ Your infrastructure's nervous system. Discovers services, maps dependencies, dia
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-60%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-81%20passed-brightgreen.svg)]()
 
 ---
 

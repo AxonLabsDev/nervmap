@@ -102,14 +102,6 @@ class PortCollector:
                     c = int(hex_ip[4:6], 16)
                     d = int(hex_ip[6:8], 16)
                     addr = f"{a}.{b}.{c}.{d}"
-                elif addr.startswith("0000:0000:0000:0000:0000:ffff:"):
-                    # Fallback for other formats
-                    hex_ip = full[24:]
-                    a = int(hex_ip[0:2], 16)
-                    b = int(hex_ip[2:4], 16)
-                    c = int(hex_ip[4:6], 16)
-                    d = int(hex_ip[6:8], 16)
-                    addr = f"{a}.{b}.{c}.{d}"
                 elif addr == "0000:0000:0000:0000:0000:0000:0000:0000":
                     addr = "::"
                 elif addr == "0000:0000:0000:0000:0000:0000:0000:0001":

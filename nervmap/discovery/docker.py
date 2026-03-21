@@ -37,6 +37,7 @@ class DockerCollector:
             try:
                 services.append(self._to_service(ctr))
             except Exception as exc:
+                logger.debug("Skipping container %s: %s", getattr(ctr, 'name', '?'), exc)
                 continue
 
         return services
