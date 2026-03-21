@@ -69,9 +69,11 @@ def check_circular_dependency(state: SystemState, cfg: dict) -> list[Issue]:
     """Detect circular dependencies: A -> B -> ... -> A."""
     issues: list[Issue] = []
 
-    # Build adjacency list from connections
+    # Build adjacency list from connections (skip associations — not dependencies)
     graph: dict[str, set[str]] = {}
     for conn in state.connections:
+        if conn.type == "association":
+            continue
         graph.setdefault(conn.source, set()).add(conn.target)
 
     # DFS cycle detection with canonical deduplication

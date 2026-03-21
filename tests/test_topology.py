@@ -89,7 +89,7 @@ class TestDependencyMapper:
         assert len(inferred) >= 1
 
     def test_docker_network_inference(self):
-        """Services on same custom Docker network get declared connections."""
+        """Services on same custom Docker network get association connections (low confidence)."""
         svc_a = Service(id="docker:web", name="web", type="docker",
                         status="running", metadata={"networks": ["mynet"]})
         svc_b = Service(id="docker:api", name="api", type="docker",
@@ -100,9 +100,9 @@ class TestDependencyMapper:
         mapper = DependencyMapper(state, DEFAULTS)
         conns = mapper.map()
 
-        declared = [c for c in conns if c.type == "declared"]
-        assert len(declared) >= 1
-        assert declared[0].confidence == 1.0
+        associations = [c for c in conns if c.type == "association"]
+        assert len(associations) >= 1
+        assert associations[0].confidence == 0.3
 
     def test_bridge_network_ignored(self):
         """Default bridge network does not create connections."""

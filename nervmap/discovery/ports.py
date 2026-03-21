@@ -93,12 +93,21 @@ class PortCollector:
                 parts = [full[i:i+4] for i in range(0, 32, 4)]
                 addr = ":".join(parts)
                 # Simplify ::ffff:x.x.x.x (IPv4-mapped)
-                if addr.startswith("0000:0000:0000:0000:0000:ffff:"):
-                    hex_ip = addr[30:]
+                # Use 'full' (raw hex without colons) for reliable extraction
+                if full.startswith("00000000" * 2 + "0000ffff"):
+                    hex_ip = full[24:]  # last 8 hex chars = IPv4
                     a = int(hex_ip[0:2], 16)
                     b = int(hex_ip[2:4], 16)
-                    c = int(hex_ip[4:6], 16) if len(hex_ip) > 4 else 0
-                    d = int(hex_ip[6:8], 16) if len(hex_ip) > 6 else 0
+                    c = int(hex_ip[4:6], 16)
+                    d = int(hex_ip[6:8], 16)
+                    addr = f"{a}.{b}.{c}.{d}"
+                elif addr.startswith("0000:0000:0000:0000:0000:ffff:"):
+                    # Fallback for other formats
+                    hex_ip = full[24:]
+                    a = int(hex_ip[0:2], 16)
+                    b = int(hex_ip[2:4], 16)
+                    c = int(hex_ip[4:6], 16)
+                    d = int(hex_ip[6:8], 16)
                     addr = f"{a}.{b}.{c}.{d}"
                 elif addr == "0000:0000:0000:0000:0000:0000:0000:0000":
                     addr = "::"

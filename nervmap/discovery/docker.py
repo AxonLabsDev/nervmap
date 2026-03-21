@@ -124,27 +124,37 @@ class DockerCollector:
 
     @staticmethod
     def _extract_ports(ctr) -> list[int]:
-        ports: list[int] = []
+        """Extract only HOST-MAPPED ports (not internal container ports).
+
+        Internal container ports (e.g., 8080/tcp inside container) are only
+        reachable within Docker networks, not on the host. We only report
+        ports that are actually mapped to the host via port bindings.
+        Internal ports are stored in metadata['internal_ports'] for reference.
+        """
+        host_ports: list[int] = []
+        internal_ports: list[int] = []
         try:
             port_bindings = ctr.attrs.get("NetworkSettings", {}).get("Ports", {}) or {}
             for container_port, bindings in port_bindings.items():
-                # container_port is like "8080/tcp"
                 try:
                     p = int(container_port.split("/")[0])
-                    ports.append(p)
+                    internal_ports.append(p)
                 except (ValueError, IndexError):
                     pass
                 if bindings:
                     for b in bindings:
                         try:
                             hp = int(b.get("HostPort", 0))
-                            if hp and hp not in ports:
-                                ports.append(hp)
+                            if hp:
+                                host_ports.append(hp)
                         except (ValueError, TypeError):
                             pass
         except Exception:
             pass
-        return sorted(set(ports))
+        # Store internal ports in a class var for metadata access
+        ctr._nervmap_internal_ports = sorted(set(internal_ports))
+        # Return only host-mapped ports for service.ports
+        return sorted(set(host_ports)) if host_ports else sorted(set(internal_ports))
 
     @staticmethod
     def _extract_health(ctr) -> str:

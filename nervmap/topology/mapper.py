@@ -162,9 +162,14 @@ class DependencyMapper:
         return None
 
     def _from_docker_networks(self) -> list[Connection]:
-        """Infer potential connections from shared Docker networks."""
+        """Note shared Docker networks as 'association' (not dependency).
+
+        Being on the same Docker network means 'can communicate', NOT
+        'depends on'. We use type='association' with low confidence so
+        these edges inform the graph but don't trigger dependency-based
+        diagnostics like circular-dependency.
+        """
         conns: list[Connection] = []
-        # Group docker services by network
         network_members: dict[str, list[str]] = {}
         for svc in self.state.services:
             if svc.type != "docker":
@@ -175,7 +180,6 @@ class DependencyMapper:
                     continue
                 network_members.setdefault(net, []).append(svc.id)
 
-        # Services on same custom network can communicate
         for net, members in network_members.items():
             if len(members) < 2:
                 continue
@@ -184,8 +188,8 @@ class DependencyMapper:
                     conns.append(Connection(
                         source=src,
                         target=tgt,
-                        type="declared",
-                        confidence=1.0,
+                        type="association",
+                        confidence=0.3,
                     ))
         return conns
 
