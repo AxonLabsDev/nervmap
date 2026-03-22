@@ -52,7 +52,7 @@ CLI Entry Point (Click)
   |     +-- Confidence scoring (100% declared, 85% observed, 60% inferred, 30% association)
   |
   +-- Diagnostic Engine
-  |     +-- RuleRunner (25 rules, deepcopy state, ignore.services regex)
+  |     +-- RuleRunner (26 rules, deepcopy state, ignore.services regex)
   |     +-- ImpactAnalyzer (dependent services per issue)
   |     +-- FixSuggester (deterministic, no LLM)
   |
@@ -100,7 +100,7 @@ CLI Entry Point (Click)
 | `--no-hooks` | Skip shell hook execution |
 | `--config <path>` | Custom config file path |
 
-## Diagnostic Rules (25)
+## Diagnostic Rules (26)
 
 ### Network (4)
 - `port-conflict` — host-mapped ports only, docker-proxy filtered
@@ -215,7 +215,7 @@ Recursive parsing of config file contents to find referenced files:
 - Shell commands (`cat`, `source`): referenced file paths
 - Depth limit: 5 levels, cycle protection via `seen` set
 
-### Diagnostic Rules (4)
+### Diagnostic Rules (5)
 - `ai-backend-down` — local LLM port not listening (critical)
 - `ai-model-missing` — model file path does not exist (critical)
 - `ai-config-missing` — expected config file not found (info)
