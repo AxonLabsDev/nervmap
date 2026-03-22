@@ -112,17 +112,17 @@ CLI Entry Point (Click)
 ### Dependencies (3)
 - `dependency-down` — service depends on stopped service
 - `env-port-mismatch` — env var points to non-listening port (skips Docker hostnames)
-- `circular-dependency` — DFS with frozenset dedup, association edges excluded
+- `circular-dependency` — DFS with frozenset dedup, association edges excluded, declared-only cycles skipped, 2-node inferred cycles downgraded to info
 
 ### Resources (2)
 - `disk-pressure` — filesystem > 90% (snap/boot excluded)
 - `memory-oom-risk` — system memory > 80%
 
 ### Code (6) — v0.2
-- `code-port-drift` — port in source code != port in runtime container
+- `code-port-drift` — port in source code != port in runtime container (Dockerfile EXPOSE excluded — infra, not code)
 - `code-env-missing` — env vars referenced in code but undefined in .env or runtime
 - `code-dep-missing` — declared dependencies not importable (uses find_spec, not __import__)
-- `code-entrypoint-mismatch` — Dockerfile CMD/ENTRYPOINT points to missing file
+- `code-entrypoint-mismatch` — Dockerfile CMD/ENTRYPOINT points to missing file (skipped when FROM is app image, not base image)
 - `code-env-example-drift` — .env.example missing vars that code references
 - `code-dockerfile-no-healthcheck` — Dockerfile has no HEALTHCHECK instruction
 
