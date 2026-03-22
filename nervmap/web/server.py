@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException
@@ -20,43 +21,59 @@ from nervmap.web.security import PathGuard
 
 logger = logging.getLogger("nervmap.web")
 
+MAX_WS_CLIENTS = 50
+
 
 def create_app(cfg: dict | None = None) -> FastAPI:
     """Create the FastAPI application."""
     cfg = cfg or load_config(None)
 
-    app = FastAPI(
-        title="NervMap Dashboard",
-        description="Infrastructure cartography — services, dependencies, AI chains",
-        version="0.4.0",
-    )
+    # Shared state container
+    class AppState:
+        scan_data: dict | None = None
+        scan_hash: str | None = None
+        scan_lock = asyncio.Lock()
+        ws_clients: set[WebSocket] = set()
+        scan_task: asyncio.Task | None = None
+
+    app_state = AppState()
 
     # Compute allowed paths for file API
     allowed_roots = _compute_allowed_roots(cfg)
     guard = PathGuard(allowed_roots)
 
-    # Shared state (updated by scan loop)
-    app.state.scan_data = None
-    app.state.scan_hash = None
-    app.state.cfg = cfg
-    app.state.guard = guard
-    app.state.ws_clients: set[WebSocket] = set()
+    # ── Lifespan ──────────────────────────────────────────────────
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Startup: initial scan + background loop. Shutdown: cancel task."""
+        await _run_scan(cfg, app_state)
+        app_state.scan_task = asyncio.create_task(_scan_loop(cfg, app_state))
+        yield
+        if app_state.scan_task:
+            app_state.scan_task.cancel()
+
+    app = FastAPI(
+        title="NervMap Dashboard",
+        description="Infrastructure cartography — services, dependencies, AI chains",
+        version="0.4.0",
+        lifespan=lifespan,
+    )
 
     # ── REST endpoints ────────────────────────────────────────────
 
     @app.get("/api/state")
     async def get_state():
         """Full scan result as JSON."""
-        if app.state.scan_data is None:
-            # First request triggers a scan
-            await _run_scan(app)
-        return JSONResponse(content=app.state.scan_data)
+        if app_state.scan_data is None:
+            await _run_scan(cfg, app_state)
+        return JSONResponse(content=app_state.scan_data)
 
     @app.post("/api/rescan")
     async def rescan():
         """Force a rescan."""
-        await _run_scan(app)
-        return {"status": "ok", "services": len(app.state.scan_data.get("services", []))}
+        await _run_scan(cfg, app_state)
+        return {"status": "ok", "services": len(app_state.scan_data.get("services", []))}
 
     @app.get("/api/tree")
     async def get_tree(root: str = Query(..., description="Directory path")):
@@ -89,38 +106,41 @@ def create_app(cfg: dict | None = None) -> FastAPI:
 
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket):
+        # Connection limit
+        if len(app_state.ws_clients) >= MAX_WS_CLIENTS:
+            await ws.close(code=1013)
+            return
+
         await ws.accept()
-        app.state.ws_clients.add(ws)
+        app_state.ws_clients.add(ws)
         try:
             # Send full state on connect
-            if app.state.scan_data:
-                await ws.send_json({"type": "full_state", "data": app.state.scan_data})
+            if app_state.scan_data:
+                await ws.send_json({"type": "full_state", "data": app_state.scan_data})
 
             # Keep alive loop
             while True:
                 try:
                     msg = await asyncio.wait_for(ws.receive_text(), timeout=60)
-                    data = json.loads(msg)
+                    try:
+                        data = json.loads(msg)
+                    except json.JSONDecodeError:
+                        await ws.send_json({"type": "error", "message": "Invalid JSON"})
+                        continue
+
                     if data.get("type") == "ping":
                         await ws.send_json({"type": "pong"})
                     elif data.get("type") == "rescan":
-                        await _run_scan(app)
-                        await ws.send_json({"type": "full_state", "data": app.state.scan_data})
+                        await _run_scan(cfg, app_state)
+                        await ws.send_json({"type": "full_state", "data": app_state.scan_data})
                 except asyncio.TimeoutError:
-                    # Send keepalive
                     await ws.send_json({"type": "pong"})
         except WebSocketDisconnect:
             pass
+        except Exception:
+            logger.debug("WebSocket error", exc_info=True)
         finally:
-            app.state.ws_clients.discard(ws)
-
-    # ── Background scan loop ──────────────────────────────────────
-
-    @app.on_event("startup")
-    async def startup():
-        """Run initial scan and start background loop."""
-        await _run_scan(app)
-        asyncio.create_task(_scan_loop(app))
+            app_state.ws_clients.discard(ws)
 
     # ── Static files (frontend) ───────────────────────────────────
 
@@ -135,51 +155,52 @@ def create_app(cfg: dict | None = None) -> FastAPI:
     return app
 
 
-async def _run_scan(app: FastAPI):
-    """Run a full scan in a thread pool and update state."""
-    loop = asyncio.get_event_loop()
-    cfg = app.state.cfg
+async def _run_scan(cfg: dict, app_state):
+    """Run a full scan in a thread pool and update state. Thread-safe via lock."""
+    async with app_state.scan_lock:
+        loop = asyncio.get_event_loop()
+        state, issues = await loop.run_in_executor(None, full_scan, cfg)
 
-    state, issues = await loop.run_in_executor(None, full_scan, cfg)
+        scan_dict = state.to_dict()
+        from nervmap import __version__
+        scan_dict["version"] = __version__
+        scan_dict["issues"] = [i.to_dict() for i in issues]
+        scan_dict["summary"] = {
+            "total_services": len(state.services),
+            "total_connections": len(state.connections),
+            "total_issues": len(issues),
+            "critical": sum(1 for i in issues if i.severity == "critical"),
+            "warnings": sum(1 for i in issues if i.severity == "warning"),
+            "info": sum(1 for i in issues if i.severity == "info"),
+        }
+        scan_dict["scanned_at"] = int(time.time())
 
-    scan_dict = state.to_dict()
-    from nervmap import __version__
-    scan_dict["version"] = __version__
-    scan_dict["issues"] = [i.to_dict() for i in issues]
-    scan_dict["summary"] = {
-        "total_services": len(state.services),
-        "total_connections": len(state.connections),
-        "total_issues": len(issues),
-        "critical": sum(1 for i in issues if i.severity == "critical"),
-        "warnings": sum(1 for i in issues if i.severity == "warning"),
-        "info": sum(1 for i in issues if i.severity == "info"),
-    }
-    scan_dict["scanned_at"] = int(time.time())
+        # Check if state changed
+        new_hash = hashlib.md5(
+            json.dumps(scan_dict, sort_keys=True, default=str).encode()
+        ).hexdigest()
 
-    # Check if state changed
-    new_hash = hashlib.md5(
-        json.dumps(scan_dict, sort_keys=True, default=str).encode()
-    ).hexdigest()
+        if new_hash != app_state.scan_hash:
+            app_state.scan_data = scan_dict
+            app_state.scan_hash = new_hash
 
-    if new_hash != app.state.scan_hash:
-        app.state.scan_data = scan_dict
-        app.state.scan_hash = new_hash
-
-        # Push to WebSocket clients
-        msg = json.dumps({"type": "state_update", "data": scan_dict}, default=str)
-        for ws in list(app.state.ws_clients):
-            try:
-                await ws.send_text(msg)
-            except Exception:
-                app.state.ws_clients.discard(ws)
+            # Push to WebSocket clients
+            msg = json.dumps({"type": "state_update", "data": scan_dict}, default=str)
+            for ws in list(app_state.ws_clients):
+                try:
+                    await ws.send_text(msg)
+                except Exception:
+                    app_state.ws_clients.discard(ws)
 
 
-async def _scan_loop(app: FastAPI, interval: int = 10):
+async def _scan_loop(cfg: dict, app_state, interval: int = 10):
     """Background loop: rescan every N seconds, push diffs."""
     while True:
         await asyncio.sleep(interval)
         try:
-            await _run_scan(app)
+            await _run_scan(cfg, app_state)
+        except asyncio.CancelledError:
+            break
         except Exception:
             logger.debug("Background scan failed", exc_info=True)
 

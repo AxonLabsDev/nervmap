@@ -95,6 +95,30 @@ class TestPathGuard:
         assert link_entry["is_symlink"] is True
         assert "symlink_target" in link_entry
 
+    def test_symlink_escape_blocked(self, tmp_path):
+        """Symlink pointing outside allowed root is blocked on read."""
+        link = tmp_path / "escape.py"
+        link.symlink_to("/etc/hostname")
+        guard = PathGuard([str(tmp_path)])
+        with pytest.raises(ValueError):
+            guard.validate_read(str(link))
+
+    def test_env_file_blocked(self, tmp_path):
+        """.env files are not in allowed extensions (security)."""
+        f = tmp_path / ".env"
+        f.write_text("SECRET=password123")
+        guard = PathGuard([str(tmp_path)])
+        with pytest.raises(ValueError, match="extension"):
+            guard.validate_read(str(f))
+
+    def test_env_example_allowed(self, tmp_path):
+        """.env.example files ARE allowed."""
+        f = tmp_path / ".env.example"
+        f.write_text("SECRET=")
+        guard = PathGuard([str(tmp_path)])
+        result = guard.validate_read(str(f))
+        assert result is not None
+
     def test_multiple_roots(self, tmp_path):
         """Multiple allowed roots all work."""
         dir_a = tmp_path / "a"

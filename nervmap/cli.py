@@ -11,7 +11,7 @@ import click
 logger = logging.getLogger("nervmap")
 
 from nervmap import __version__
-from nervmap.config import load_config, is_collector_enabled
+from nervmap.config import load_config
 from nervmap.models import SystemState
 
 
@@ -167,40 +167,18 @@ def scan(ctx, as_json, quiet, deep, no_code):
     scope = ctx.obj.get("scope")
 
     t0 = time.monotonic()
-    state = _collect(cfg, deep=deep)
+
+    from nervmap.scanner import full_scan
+    state, issues = full_scan(cfg, no_code=no_code)
+
     if scope:
         state = _apply_scope(state, scope)
-        logger.debug("Scope '%s': %d services after filtering", scope, len(state.services))
-    logger.debug("Discovery complete: %d services, %d listening ports", len(state.services), len(state.listening_ports))
+        # Re-run diagnostics on scoped state
+        from nervmap.diagnostics.engine import RuleRunner
+        runner = RuleRunner()
+        issues = runner.evaluate(state, cfg)
 
-    # Source code analysis (unless --no-code)
-    if not no_code:
-        try:
-            from nervmap.source.locator import ProjectLocator
-            from nervmap.source.linker import CodeLinker
-            locator = ProjectLocator(state, cfg)
-            projects = locator.locate()
-            if projects:
-                linker = CodeLinker()
-                linker.link(state.services, projects)
-                state.projects = projects
-                logger.debug("Code analysis: %d projects found", len(projects))
-        except Exception:
-            logger.debug("Source code analysis failed", exc_info=True)
-
-    # AI agent discovery (unless --no-code which also disables AI)
-    if not no_code:
-        try:
-            from nervmap.ai.collector import AICollector
-            ai_collector = AICollector(cfg)
-            state.ai_chains = ai_collector.collect(state=state)
-            logger.debug("AI discovery: %d chains found", len(state.ai_chains))
-        except Exception:
-            logger.debug("AI collector failed", exc_info=True)
-
-    runner = RuleRunner()
-    issues = runner.evaluate(state, cfg)
-    logger.debug("Diagnostics complete: %d issues found", len(issues))
+    logger.debug("Scan complete: %d services, %d issues", len(state.services), len(issues))
 
     elapsed = time.monotonic() - t0
 

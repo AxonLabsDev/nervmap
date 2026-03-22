@@ -9,10 +9,9 @@ ALLOWED_EXTENSIONS = {
     ".py", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs",
     ".json", ".yml", ".yaml", ".toml", ".cfg", ".conf", ".ini",
     ".md", ".txt", ".rst", ".sh", ".bash",
-    ".env", ".env.example", ".env.local",
+    ".env.example",
     ".html", ".css", ".xml",
     ".dockerfile", ".dockerignore", ".gitignore",
-    ".gguf",
 }
 
 # Paths that are never served regardless of whitelist
@@ -47,6 +46,7 @@ class PathGuard:
         basename = os.path.basename(resolved).lower()
         if ext.lower() not in ALLOWED_EXTENSIONS and basename not in (
             "dockerfile", "makefile", "gemfile", "procfile",
+            ".env.example",
         ):
             raise ValueError(f"Access denied: extension not allowed")
 
@@ -101,7 +101,13 @@ class PathGuard:
                     }
                     if is_link:
                         try:
-                            entry["symlink_target"] = os.readlink(full)
+                            target = os.readlink(full)
+                            # Only expose target if it resolves within allowed roots
+                            resolved_target = os.path.realpath(full)
+                            if self._is_under_root(resolved_target):
+                                entry["symlink_target"] = target
+                            else:
+                                entry["symlink_target"] = "(outside allowed paths)"
                         except OSError:
                             pass
                     entries.append(entry)
