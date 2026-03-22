@@ -30,7 +30,7 @@ class TestJsonRenderer:
             renderer.render(state, [issue], 1.5)
 
         output = json.loads(buf.getvalue())
-        assert output["version"] == "0.3.0"
+        assert output["version"] == "0.4.0"
         assert output["elapsed_seconds"] == 1.5
         assert len(output["services"]) == 1
         assert len(output["issues"]) == 1

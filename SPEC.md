@@ -1,14 +1,14 @@
-# NervMap — Specification v0.3.0
+# NervMap — Specification v0.4.0
 
 > `docker ps` shows containers. NervMap shows why your app is down.
 
-## Status: v0.3.0 — COMPLETE (10/10 review score)
+## Status: v0.4.0 — COMPLETE (10/10 review score)
 
-- 170 tests passing
+- 179 tests passing, 77% coverage
 - 0% false positive rate
-- 25 diagnostic rules (15 infra + 6 code + 4 AI)
+- 26 diagnostic rules (15 infra + 6 code + 5 AI)
 - Source code analysis with 4-strategy linking
-- AI agent chain mapping with config tracing
+- AI agent chain mapping with config tracing + proxy detection + consumer tracking
 - `nervmap code` and `nervmap ai` subcommands
 
 ## Architecture
@@ -220,6 +220,7 @@ Recursive parsing of config file contents to find referenced files:
 - `ai-model-missing` — model file path does not exist (critical)
 - `ai-config-missing` — expected config file not found (info)
 - `ai-orphan-backend` — LLM running with no agent connected (info)
+- `ai-gpu-overcommit` — GPU memory >90% with multiple LLM backends (warning)
 
 ## Roadmap
 

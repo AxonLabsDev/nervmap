@@ -6,7 +6,7 @@ Your infrastructure's nervous system. Discovers services, maps dependencies, ana
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-170%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-179%20passed-brightgreen.svg)]()
 
 ---
 
@@ -18,7 +18,7 @@ You arrive on a server. You type `nervmap`. In under 2 seconds, you see:
 - **Who depends on who** (inferred from TCP connections, env vars, Docker networks)
 - **Source code cross-references** (which code project runs in which container)
 - **AI agent chains** (which LLM, which config files, which terminal session)
-- **What's broken and why** (25 diagnostic rules with severity, impact, and fix suggestions)
+- **What's broken and why** (26 diagnostic rules with severity, impact, and fix suggestions)
 
 No config file. No setup wizard. No database. Just answers.
 
@@ -192,6 +192,7 @@ ttyd :5001 -> tmux "dev" -> claude-code [PID]
 | vLLM | `vllm.entrypoints` in cmdline |
 | TGI | `text-generation-launcher` in cmdline |
 | Embedding servers | `embedding-server` / `embedding*.py` patterns |
+| socat proxies | `TCP-LISTEN`/`TCP` forwarding (auto-linked to backends) |
 
 ---
 
@@ -212,7 +213,7 @@ NervMap infers connections between services using multiple evidence layers:
 
 ## Diagnostics
 
-25 built-in rules, zero false positives, deterministic (no LLM required):
+26 built-in rules, zero false positives, deterministic (no LLM required):
 
 | Category | Rules |
 |----------|-------|
@@ -222,7 +223,7 @@ NervMap infers connections between services using multiple evidence layers:
 | **Dependencies** | `dependency-down`, `env-port-mismatch`, `circular-dependency` |
 | **Resources** | `disk-pressure`, `memory-oom-risk` |
 | **Code** (v0.2) | `code-port-drift`, `code-env-missing`, `code-dep-missing`, `code-entrypoint-mismatch`, `code-env-example-drift`, `code-dockerfile-no-healthcheck` |
-| **AI** (v0.3) | `ai-backend-down`, `ai-model-missing`, `ai-config-missing`, `ai-orphan-backend` |
+| **AI** (v0.3+) | `ai-backend-down`, `ai-model-missing`, `ai-config-missing`, `ai-orphan-backend`, `ai-gpu-overcommit` |
 
 ### Code Diagnostic Rules (v0.2)
 
@@ -243,6 +244,7 @@ NervMap infers connections between services using multiple evidence layers:
 | `ai-model-missing` | critical | Model file referenced in cmdline does not exist |
 | `ai-config-missing` | info | Expected config file for agent type not found |
 | `ai-orphan-backend` | info | LLM backend running with no agent connected |
+| `ai-gpu-overcommit` | warning | GPU memory >90% with multiple LLM backends |
 
 Every issue includes:
 - **Severity** (critical / warning / info)
