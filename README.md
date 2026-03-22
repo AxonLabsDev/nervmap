@@ -2,21 +2,22 @@
 
 > `docker ps` shows containers. **NervMap shows why your app is down.**
 
-Your infrastructure's nervous system. Discovers services, maps dependencies, diagnoses failures. Zero config required.
+Your infrastructure's nervous system. Discovers services, maps dependencies, analyzes source code, and diagnoses failures. Zero config required.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-81%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-133%20passed-brightgreen.svg)]()
 
 ---
 
 ## What It Does
 
-You arrive on a server. You type `nervmap`. In under 1 second, you see:
+You arrive on a server. You type `nervmap`. In under 2 seconds, you see:
 
 - **Every service running** (Docker containers + systemd units + bare processes)
 - **Who depends on who** (inferred from TCP connections, env vars, Docker networks)
-- **What's broken and why** (with severity, impact analysis, and fix suggestions)
+- **Source code cross-references** (which code project runs in which container)
+- **What's broken and why** (21 diagnostic rules with severity, impact, and fix suggestions)
 
 No config file. No setup wizard. No database. Just answers.
 
@@ -39,19 +40,39 @@ pipx install nervmap
 ## Quick Start
 
 ```bash
+# Infrastructure scan
 nervmap                              # Full scan, colored output
 nervmap scan --json                  # Machine-readable JSON
 nervmap scan --quiet                 # Issues only
-nervmap --scope myapp scan         # Scan only services matching "myapp"
+nervmap scan --no-code               # Skip source code analysis
+
+# Scope filtering
+nervmap --scope myapp scan           # Scan only services matching "myapp"
 nervmap --scope "docker:next*" scan  # Glob pattern on service IDs
 nervmap --scope /opt/myproject scan  # Scope to a docker-compose project dir
-nervmap deps                         # Dependency graph
+
+# Source code analysis
+nervmap code /opt/myproject          # Analyze a specific project directory
+nervmap code /opt/myproject --json   # JSON output for code analysis
+
+# Other
+nervmap version                      # Show version
+
+# Dependency graph
+nervmap deps                         # Pretty-print dependency graph
 nervmap deps --dot                   # Graphviz DOT export
 nervmap deps --mermaid               # Mermaid diagram export
+
+# Diagnostics
 nervmap issues                       # All issues
 nervmap issues --critical            # Critical only
+
+# Options
+nervmap scan --deep                  # Deep scan (parse config files)
 nervmap scan --verbose               # Debug logging
 nervmap scan --no-hooks              # Disable shell hooks
+nervmap scan --show-secrets          # Show raw env vars (dangerous)
+nervmap scan --config /path/to.yml   # Custom config file
 ```
 
 ---
@@ -59,6 +80,15 @@ nervmap scan --no-hooks              # Disable shell hooks
 ## Discovery
 
 NervMap auto-detects services from 4 sources simultaneously.
+
+| Source | What It Finds | How |
+|--------|--------------|-----|
+| **Docker** | Containers, ports, health, networks, env vars | Docker API socket |
+| **Systemd** | Services, states, PIDs | `systemctl` |
+| **TCP Ports** | All listening ports with owning PIDs | `/proc/net/tcp` + `/proc/net/tcp6` |
+| **Processes** | Bare processes with port correlation | `/proc/*/cmdline` + `/proc/*/fd` |
+
+### Scope Filtering
 
 Use `--scope` to limit the scan to a specific project:
 
@@ -70,12 +100,47 @@ Use `--scope` to limit the scan to a specific project:
 
 All commands (`scan`, `deps`, `issues`) respect `--scope`.
 
-| Source | What It Finds | How |
-|--------|--------------|-----|
-| **Docker** | Containers, ports, health, networks, env vars | Docker API socket |
-| **Systemd** | Services, states, PIDs | `systemctl` |
-| **TCP Ports** | All listening ports with owning PIDs | `/proc/net/tcp` + `/proc/net/tcp6` |
-| **Processes** | Bare processes with port correlation | `/proc/*/cmdline` + `/proc/*/fd` |
+---
+
+## Source Code Analysis (v0.2)
+
+NervMap automatically finds source code projects linked to running services and cross-references them with the infrastructure.
+
+### Project Discovery
+
+3 strategies, tried in order:
+
+| Strategy | Source | Signal |
+|----------|--------|--------|
+| Docker Compose labels | `com.docker.compose.project.working_dir` | Container metadata |
+| Systemd ExecStart | Service unit file paths | `/etc/systemd/system/*.service` |
+| Config `source.paths` | `.nervmap.yml` explicit paths | User-defined |
+
+### Code-to-Infrastructure Linking
+
+4 linking strategies with confidence scores:
+
+| Strategy | Confidence | Method |
+|----------|-----------|--------|
+| Docker Compose `build.context` | 100% | Declared build context matches project path |
+| Docker label `working_dir` | 100% | Label path matches project path |
+| Dockerfile `COPY`/`ADD` | 85% | Dockerfile copies from project dir + name match |
+| Proximity heuristic | 60% | Dockerfile in project dir + name match |
+
+### Language Support
+
+| Language | Detected By | Parsed |
+|----------|------------|--------|
+| Python | `requirements.txt`, `pyproject.toml`, `setup.py` | imports, `os.getenv()`, `PORT =` bindings |
+| JavaScript | `package.json` | `require()`, `import`, `process.env` |
+| TypeScript | `tsconfig.json` | `import`, `process.env` |
+| Go | `go.mod` | dependency names (go.mod only, no source parsing) |
+
+### Framework Detection
+
+Python: FastAPI, Flask, Django, Starlette, Tornado, Sanic
+JavaScript/TypeScript: Express, Next.js, Nuxt.js, Koa, Hapi, Fastify, NestJS
+Go: Gin, Gorilla, Fiber
 
 ---
 
@@ -96,7 +161,7 @@ NervMap infers connections between services using multiple evidence layers:
 
 ## Diagnostics
 
-15 built-in rules, zero false positives, deterministic (no LLM required):
+21 built-in rules, zero false positives, deterministic (no LLM required):
 
 | Category | Rules |
 |----------|-------|
@@ -105,6 +170,18 @@ NervMap infers connections between services using multiple evidence layers:
 | **Systemd** | `service-failed`, `service-activating-stuck` |
 | **Dependencies** | `dependency-down`, `env-port-mismatch`, `circular-dependency` |
 | **Resources** | `disk-pressure`, `memory-oom-risk` |
+| **Code** (v0.2) | `code-port-drift`, `code-env-missing`, `code-dep-missing`, `code-entrypoint-mismatch`, `code-env-example-drift`, `code-dockerfile-no-healthcheck` |
+
+### Code Diagnostic Rules (v0.2)
+
+| Rule | Severity | Detects |
+|------|----------|---------|
+| `code-port-drift` | warning | Port in source code differs from runtime port |
+| `code-env-missing` | warning | Code references env vars not defined in `.env` or runtime |
+| `code-dep-missing` | info | Declared dependency not importable on the system |
+| `code-entrypoint-mismatch` | warning | Dockerfile CMD/ENTRYPOINT points to missing file |
+| `code-env-example-drift` | info | `.env.example` is missing vars that code references |
+| `code-dockerfile-no-healthcheck` | info | Dockerfile has no HEALTHCHECK instruction |
 
 Every issue includes:
 - **Severity** (critical / warning / info)
@@ -140,6 +217,11 @@ scan:
 ignore:
   ports: [22]             # Don't flag SSH
   services: ["snap.*"]    # Regex patterns to exclude
+
+source:
+  paths:                  # Additional source code directories to scan
+    - /opt/myapp
+    - ~/projects/api
 
 timeouts:
   http: 5
@@ -194,6 +276,7 @@ Hook data is always redacted (no secrets passed to external scripts).
 - [ ] Plugin system (subprocess JSON protocol)
 - [ ] Kubernetes support
 - [ ] Community diagnostic rules (YAML format)
+- [ ] Incremental scan cache (SQLite)
 
 ---
 

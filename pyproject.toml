@@ -37,7 +37,7 @@ dependencies = [
 nervmap = "nervmap.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/axonlabs/nervmap"
+Homepage = "https://github.com/AxonLabsDev/nervmap"
 
 [tool.setuptools.packages.find]
 include = ["nervmap*"]
