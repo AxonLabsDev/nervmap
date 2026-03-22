@@ -444,6 +444,107 @@ class TestQuotedPaths:
 # CLI command
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Proxy detection
+# ---------------------------------------------------------------------------
+
+class TestProxyDetection:
+    """Tests for socat proxy detection."""
+
+    def test_parse_socat_cmdline(self):
+        """Parse socat TCP forwarding command."""
+        from nervmap.ai.collector import AICollector
+        cmd = "socat TCP-LISTEN:18123,bind=10.0.0.1,reuseaddr,fork TCP:127.0.0.1:8123"
+        proxy = AICollector._parse_socat_cmdline(1234, cmd)
+        assert proxy is not None
+        assert proxy.proxy_type == "socat"
+        assert proxy.listen_port == 18123
+        assert proxy.listen_bind == "10.0.0.1"
+        assert proxy.target_port == 8123
+        assert proxy.target_host == "127.0.0.1"
+
+    def test_parse_socat_no_bind(self):
+        """Parse socat without explicit bind address."""
+        from nervmap.ai.collector import AICollector
+        cmd = "socat TCP-LISTEN:5000,reuseaddr,fork TCP:127.0.0.1:3000"
+        proxy = AICollector._parse_socat_cmdline(1234, cmd)
+        assert proxy is not None
+        assert proxy.listen_port == 5000
+        assert proxy.listen_bind is None
+        assert proxy.target_port == 3000
+
+    def test_find_proxy_for_port(self):
+        """Match proxy to backend port."""
+        from nervmap.ai.collector import AICollector
+        from nervmap.ai.models import ProxyNode
+        proxies = [
+            ProxyNode(proxy_type="socat", listen_port=18123, target_port=8123),
+            ProxyNode(proxy_type="socat", listen_port=5557, target_port=5557),
+        ]
+        match = AICollector._find_proxy_for_port(proxies, 8123)
+        assert match is not None
+        assert match.listen_port == 18123
+
+    def test_find_proxy_no_match(self):
+        """No proxy for unknown port."""
+        from nervmap.ai.collector import AICollector
+        from nervmap.ai.models import ProxyNode
+        proxies = [ProxyNode(proxy_type="socat", listen_port=18123, target_port=8123)]
+        assert AICollector._find_proxy_for_port(proxies, 9999) is None
+
+    def test_proxy_node_to_dict(self):
+        """ProxyNode serialization."""
+        from nervmap.ai.models import ProxyNode
+        p = ProxyNode(proxy_type="socat", pid=100, listen_port=18123,
+                      listen_bind="10.0.0.1", target_port=8123)
+        d = p.to_dict()
+        assert d["proxy_type"] == "socat"
+        assert d["listen_port"] == 18123
+        assert d["target_port"] == 8123
+
+
+# ---------------------------------------------------------------------------
+# GPU overcommit rule
+# ---------------------------------------------------------------------------
+
+class TestGPUOvercommit:
+    """Tests for ai-gpu-overcommit rule."""
+
+    def test_no_issue_single_backend(self):
+        """No overcommit warning with only one GPU backend."""
+        from nervmap.ai.rules import check_ai_gpu_overcommit
+        chain = AIChain(
+            id="ai:llama:1",
+            agent=AgentNode(agent_type="llama_cpp", pid=1, cwd="/", cmdline="", display_name="llama"),
+            backend=BackendNode(backend_type="local", provider="llama_cpp",
+                                endpoint="127.0.0.1:8123", gpu_layers=99),
+        )
+        state = SystemState()
+        state.ai_chains = [chain]
+        issues = check_ai_gpu_overcommit(state, DEFAULTS)
+        assert len(issues) == 0  # Only 1 backend, no overcommit possible
+
+    def test_no_issue_no_gpu(self):
+        """No warning when backends have no GPU layers."""
+        from nervmap.ai.rules import check_ai_gpu_overcommit
+        chains = [
+            AIChain(id="ai:a:1",
+                    agent=AgentNode(agent_type="a", pid=1, cwd="/", cmdline="", display_name="a"),
+                    backend=BackendNode(backend_type="local", provider="a", endpoint="x", gpu_layers=0)),
+            AIChain(id="ai:b:2",
+                    agent=AgentNode(agent_type="b", pid=2, cwd="/", cmdline="", display_name="b"),
+                    backend=BackendNode(backend_type="local", provider="b", endpoint="y", gpu_layers=0)),
+        ]
+        state = SystemState()
+        state.ai_chains = chains
+        issues = check_ai_gpu_overcommit(state, DEFAULTS)
+        assert len(issues) == 0
+
+
+# ---------------------------------------------------------------------------
+# CLI command
+# ---------------------------------------------------------------------------
+
 class TestAICommand:
     """Tests for nervmap ai CLI command."""
 

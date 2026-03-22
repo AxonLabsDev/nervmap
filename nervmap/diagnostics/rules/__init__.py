@@ -49,6 +49,7 @@ def get_all_rules() -> list[RuleFunc]:
         check_ai_model_missing,
         check_ai_config_missing,
         check_ai_orphan_backend,
+        check_ai_gpu_overcommit,
     )
 
     return [
@@ -77,4 +78,5 @@ def get_all_rules() -> list[RuleFunc]:
         check_ai_model_missing,
         check_ai_config_missing,
         check_ai_orphan_backend,
+        check_ai_gpu_overcommit,
     ]

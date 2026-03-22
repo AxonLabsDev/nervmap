@@ -258,7 +258,7 @@ def scan(ctx, as_json, quiet, deep, no_code):
         try:
             from nervmap.ai.collector import AICollector
             ai_collector = AICollector(cfg)
-            state.ai_chains = ai_collector.collect()
+            state.ai_chains = ai_collector.collect(state=state)
             logger.debug("AI discovery: %d chains found", len(state.ai_chains))
         except Exception:
             logger.debug("AI collector failed", exc_info=True)

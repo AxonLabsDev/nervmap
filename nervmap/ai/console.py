@@ -97,6 +97,26 @@ class AIRenderer:
 
         self.console.print(line)
 
+        # Proxy info
+        if chain.proxy:
+            proxy_line = Text()
+            proxy_line.append(f"      via {chain.proxy.proxy_type}", style="magenta")
+            if chain.proxy.listen_port and chain.proxy.target_port:
+                bind = f"{chain.proxy.listen_bind}:" if chain.proxy.listen_bind else ":"
+                proxy_line.append(
+                    f" {bind}{chain.proxy.listen_port} -> "
+                    f"{chain.proxy.target_host}:{chain.proxy.target_port}",
+                    style="dim",
+                )
+            self.console.print(proxy_line)
+
+        # Consumers
+        if chain.consumers:
+            cons_line = Text()
+            cons_line.append("      consumers: ", style="dim")
+            cons_line.append(", ".join(chain.consumers), style="bold")
+            self.console.print(cons_line)
+
         # Configs — full chain tree
         if chain.configs:
             for conf in chain.configs:

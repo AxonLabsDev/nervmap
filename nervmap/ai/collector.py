@@ -8,7 +8,7 @@ import re
 import subprocess
 
 from nervmap.ai.models import (
-    AIChain, SessionNode, AgentNode, ConfigNode, BackendNode,
+    AIChain, SessionNode, AgentNode, ConfigNode, BackendNode, ProxyNode,
 )
 from nervmap.ai.signatures import (
     AGENT_SIGNATURES, BACKEND_SIGNATURES,
@@ -30,13 +30,14 @@ class AICollector:
         # Load custom profiles from .nervmap.yml
         self._extra_agents, self._extra_backends = load_custom_profiles(self.cfg)
 
-    def collect(self) -> list[AIChain]:
+    def collect(self, state=None) -> list[AIChain]:
         """Run full AI discovery and return chains."""
         chains: list[AIChain] = []
 
-        # Phase 1: Scan all processes for agents + backends + ttyd
+        # Phase 1: Scan all processes for agents + backends + ttyd + proxies
         agents_raw = []
         backends_raw = []
+        proxies_raw = []
         self._ttyd_map = {}
 
         for pid in self._iter_pids():
@@ -47,6 +48,12 @@ class AICollector:
             # Detect ttyd during same scan
             if "ttyd" in cmdline:
                 self._parse_ttyd_cmdline(pid, cmdline)
+
+            # Detect socat proxies (TCP forwarding)
+            if "socat" in cmdline and "TCP-LISTEN" in cmdline:
+                proxy = self._parse_socat_cmdline(pid, cmdline)
+                if proxy:
+                    proxies_raw.append(proxy)
 
             agent_sig = match_agent(cmdline, self._extra_agents)
             if agent_sig:
@@ -86,6 +93,9 @@ class AICollector:
         agent_pids = {ag["pid"] for ag in agents_raw}
         for bk_node in backend_nodes:
             if bk_node.pid and bk_node.pid not in agent_pids:
+                # Find proxy that forwards to this backend
+                proxy = self._find_proxy_for_port(
+                    proxies_raw, bk_node.ports[0] if bk_node.ports else None)
                 chain = AIChain(
                     id=f"ai:{bk_node.provider}:{bk_node.pid}",
                     status="running",
@@ -97,8 +107,12 @@ class AICollector:
                         display_name=f"{bk_node.provider} (standalone)",
                     ),
                     backend=bk_node,
+                    proxy=proxy,
                 )
                 chains.append(chain)
+
+        # Detect consumers: find processes connecting to backend/proxy ports
+        self._detect_consumers(chains, state)
 
         return chains
 
@@ -372,3 +386,81 @@ class AICollector:
         # Remove extension
         name = basename.rsplit(".", 1)[0] if "." in basename else basename
         return name
+
+    @staticmethod
+    def _parse_socat_cmdline(pid: int, cmdline: str) -> ProxyNode | None:
+        """Parse a socat TCP-LISTEN/TCP forwarding command."""
+        # socat TCP-LISTEN:18123,bind=1.2.3.4,... TCP:127.0.0.1:8123
+        listen_match = re.search(r"TCP-LISTEN:(\d+)(?:,bind=([^,\s]+))?", cmdline)
+        target_match = re.search(r"TCP:([^:,\s]+):(\d+)", cmdline)
+        if not listen_match or not target_match:
+            return None
+        try:
+            return ProxyNode(
+                proxy_type="socat",
+                pid=pid,
+                listen_port=int(listen_match.group(1)),
+                listen_bind=listen_match.group(2),
+                target_port=int(target_match.group(2)),
+                target_host=target_match.group(1),
+            )
+        except (ValueError, IndexError):
+            return None
+
+    @staticmethod
+    def _find_proxy_for_port(proxies: list[ProxyNode], port: int | None) -> ProxyNode | None:
+        """Find a proxy that forwards to a specific backend port."""
+        if not port:
+            return None
+        for proxy in proxies:
+            if proxy.target_port == port:
+                return proxy
+        return None
+
+    def _detect_consumers(self, chains: list[AIChain], state=None):
+        """Find processes that connect to backend/proxy ports (consumers).
+
+        Uses established TCP connections from SystemState if available,
+        otherwise uses /proc/net/tcp.
+        """
+        if not state:
+            return
+
+        # Build a map of backend ports -> chain IDs
+        port_to_chain: dict[int, str] = {}
+        for chain in chains:
+            if chain.backend and chain.backend.ports:
+                for p in chain.backend.ports:
+                    port_to_chain[p] = chain.id
+            if chain.proxy and chain.proxy.listen_port:
+                port_to_chain[chain.proxy.listen_port] = chain.id
+
+        if not port_to_chain:
+            return
+
+        # Check established connections for consumers
+        established = getattr(state, "established", [])
+        chain_consumers: dict[str, set[str]] = {}
+
+        for conn in established:
+            remote_port = conn.get("remote_port") or conn.get("dst_port")
+            if not remote_port or remote_port not in port_to_chain:
+                continue
+            chain_id = port_to_chain[remote_port]
+            local_pid = conn.get("pid")
+            if not local_pid:
+                continue
+            # Try to identify the consumer by its process name
+            cmdline = self._read_cmdline(local_pid)
+            if not cmdline:
+                continue
+            # Extract a short consumer name
+            parts = cmdline.split()
+            name = os.path.basename(parts[0]) if parts else f"pid:{local_pid}"
+            chain_consumers.setdefault(chain_id, set()).add(name)
+
+        # Assign consumers to chains
+        for chain in chains:
+            consumers = chain_consumers.get(chain.id, set())
+            if consumers:
+                chain.consumers = sorted(consumers)

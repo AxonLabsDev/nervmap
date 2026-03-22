@@ -119,3 +119,57 @@ def check_ai_orphan_backend(state: SystemState, cfg: dict) -> list[Issue]:
                 impact=[chain.id],
             ))
     return issues
+
+
+def check_ai_gpu_overcommit(state: SystemState, cfg: dict) -> list[Issue]:
+    """Detect when GPU memory is critically full with multiple LLM backends."""
+    issues: list[Issue] = []
+    chains = getattr(state, "ai_chains", [])
+    if not chains:
+        return issues
+
+    # Collect all local backends with GPU layers
+    gpu_backends = []
+    for chain in chains:
+        if chain.backend and chain.backend.backend_type == "local" and \
+           chain.backend.gpu_layers and chain.backend.gpu_layers > 0:
+            gpu_backends.append(chain)
+
+    if len(gpu_backends) <= 1:
+        return issues
+
+    # Check GPU memory usage via nvidia-smi
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total,memory.used",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return issues
+
+        for line in result.stdout.strip().splitlines():
+            parts = line.split(",")
+            if len(parts) == 2:
+                total_mb = int(parts[0].strip())
+                used_mb = int(parts[1].strip())
+                usage_pct = (used_mb / total_mb * 100) if total_mb > 0 else 0
+
+                if usage_pct > 90:
+                    backend_names = [c.backend.model_name or c.backend.provider
+                                     for c in gpu_backends]
+                    issues.append(Issue(
+                        rule_id="ai-gpu-overcommit",
+                        severity="warning",
+                        service="gpu:0",
+                        message=f"GPU memory {usage_pct:.0f}% used with "
+                                f"{len(gpu_backends)} active backends: "
+                                f"{', '.join(backend_names)}.",
+                        hint="Consider reducing GPU layers or stopping unused backends.",
+                        impact=[c.id for c in gpu_backends],
+                    ))
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+
+    return issues

@@ -131,6 +131,31 @@ class BackendNode:
 
 
 @dataclass
+class ProxyNode:
+    """A proxy/forwarder between agent and backend (socat, nginx, etc.)."""
+    proxy_type: str             # socat | nginx | haproxy
+    pid: int | None = None
+    listen_port: int | None = None
+    listen_bind: str | None = None
+    target_port: int | None = None
+    target_host: str = "127.0.0.1"
+
+    def to_dict(self) -> dict:
+        d = {"proxy_type": self.proxy_type}
+        if self.pid:
+            d["pid"] = self.pid
+        if self.listen_port is not None:
+            d["listen_port"] = self.listen_port
+        if self.listen_bind:
+            d["listen_bind"] = self.listen_bind
+        if self.target_port is not None:
+            d["target_port"] = self.target_port
+        if self.target_host:
+            d["target_host"] = self.target_host
+        return d
+
+
+@dataclass
 class AIChain:
     """Complete execution chain: terminal -> session -> agent -> configs -> backend."""
     id: str                                 # "ai:claude-code:34688"
@@ -139,6 +164,8 @@ class AIChain:
     agent: AgentNode | None = None
     configs: list[ConfigNode] = field(default_factory=list)
     backend: BackendNode | None = None
+    proxy: ProxyNode | None = None          # proxy between consumer and backend
+    consumers: list[str] = field(default_factory=list)  # apps consuming this backend
     linked_services: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -154,6 +181,10 @@ class AIChain:
             d["configs"] = [c.to_dict() for c in self.configs]
         if self.backend:
             d["backend"] = self.backend.to_dict()
+        if self.proxy:
+            d["proxy"] = self.proxy.to_dict()
+        if self.consumers:
+            d["consumers"] = self.consumers
         if self.linked_services:
             d["linked_services"] = self.linked_services
         return d
