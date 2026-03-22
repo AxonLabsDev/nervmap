@@ -98,73 +98,8 @@ def _apply_scope(state: SystemState, scope: str | None) -> SystemState:
 
 def _collect(cfg: dict, deep: bool = False) -> SystemState:
     """Run all collectors and return aggregated SystemState."""
-    from nervmap.discovery.docker import DockerCollector
-    from nervmap.discovery.systemd import SystemdCollector
-    from nervmap.discovery.ports import PortCollector
-    from nervmap.discovery.process import ProcessCollector
-    from nervmap.topology.mapper import DependencyMapper
-
-    state = SystemState()
-
-    # -- Discovery --
-    if is_collector_enabled(cfg, "docker"):
-        try:
-            dc = DockerCollector()
-            for svc in dc.collect():
-                state.services.append(svc)
-        except Exception:
-            logger.debug("Docker collector failed", exc_info=True)
-
-    if is_collector_enabled(cfg, "systemd"):
-        try:
-            sc = SystemdCollector()
-            for svc in sc.collect():
-                state.services.append(svc)
-        except Exception:
-            logger.debug("Systemd collector failed", exc_info=True)
-
-    if is_collector_enabled(cfg, "ports"):
-        try:
-            pc = PortCollector()
-            port_info = pc.collect()
-            state.listening_ports = port_info.get("listening", {})
-            state.established = port_info.get("established", [])
-        except Exception:
-            logger.debug("Port collector failed", exc_info=True)
-
-    try:
-        proc = ProcessCollector()
-        for svc in proc.collect(state.services, state.listening_ports):
-            state.services.append(svc)
-    except Exception:
-        logger.debug("Process collector failed", exc_info=True)
-
-    # -- Resource info --
-    try:
-        import psutil
-        for part in psutil.disk_partitions():
-            try:
-                usage = psutil.disk_usage(part.mountpoint)
-                state.disk_usage[part.mountpoint] = usage.percent
-            except Exception:
-                logger.debug("Disk usage failed for %s", part.mountpoint)
-        mem = psutil.virtual_memory()
-        state.memory = {
-            "total": mem.total,
-            "available": mem.available,
-            "percent": mem.percent,
-        }
-    except Exception:
-        logger.debug("Resource info collection failed", exc_info=True)
-
-    # -- Topology --
-    try:
-        mapper = DependencyMapper(state, cfg)
-        state.connections = mapper.map()
-    except Exception:
-        logger.debug("Topology mapper failed", exc_info=True)
-
-    return state
+    from nervmap.scanner import collect
+    return collect(cfg, deep=deep)
 
 
 def _get_flag(ctx, name: str, local_value):
@@ -431,6 +366,25 @@ def ai(ctx, as_json):
     else:
         renderer = AIRenderer()
         renderer.render(chains)
+
+
+@main.command()
+@click.option("--port", default=9000, type=int, help="Dashboard port.")
+@click.option("--host", default="127.0.0.1", help="Bind address.")
+@click.option("--open/--no-open", "auto_open", default=False, help="Open browser automatically.")
+@click.pass_context
+def serve(ctx, port, host, auto_open):
+    """Launch the interactive web dashboard."""
+    try:
+        from nervmap.web.server import run_server
+    except ImportError:
+        click.echo("Web dashboard requires extra dependencies.", err=True)
+        click.echo("Install with: pip install nervmap[web]", err=True)
+        raise SystemExit(1)
+
+    cfg = load_config(ctx.obj.get("config_path"))
+    click.echo(f"NervMap Dashboard starting on http://{host}:{port}")
+    run_server(cfg, host=host, port=port, auto_open=auto_open)
 
 
 @main.command("version")
