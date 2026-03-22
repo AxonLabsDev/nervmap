@@ -2,9 +2,12 @@
 
 import { useRef, useEffect } from "preact/hooks";
 import { EditorView, basicSetup } from "codemirror";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { useStore } from "../store";
+
+// Language compartment for dynamic reconfiguration
+const languageConf = new Compartment();
 
 // Language loaders (lazy)
 const LANGS: Record<string, () => Promise<any>> = {
@@ -36,26 +39,27 @@ export function EditorPanel() {
 
     if (content === null) return;
 
-    const extensions = [basicSetup, oneDark, EditorView.lineWrapping,
-      EditorState.readOnly.of(true)];
+    const extensions = [
+      basicSetup,
+      oneDark,
+      EditorView.lineWrapping,
+      EditorState.readOnly.of(true),
+      languageConf.of([]),  // empty, filled async
+    ];
 
     const state = EditorState.create({ doc: content, extensions });
     const view = new EditorView({ state, parent: containerRef.current });
 
-    // Load language grammar async
+    // Load language grammar async via Compartment
     const loader = LANGS[language];
     if (loader) {
-      loader().then((ext) => {
-        view.dispatch({
-          effects: EditorView.reconfigure.of([
-            basicSetup,
-            oneDark,
-            EditorView.lineWrapping,
-            EditorState.readOnly.of(true),
-            ext,
-          ]),
-        });
-      });
+      loader()
+        .then((ext) => {
+          view.dispatch({
+            effects: languageConf.reconfigure(ext),
+          });
+        })
+        .catch((e) => console.warn("Language load failed:", e));
     }
 
     viewRef.current = view;

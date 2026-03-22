@@ -27,33 +27,50 @@ export function App() {
       .catch((e) => setError(e.message));
   }, []);
 
-  // WebSocket for live updates
+  // WebSocket for live updates with auto-reconnect
   useEffect(() => {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/ws`);
+    let ws: WebSocket | null = null;
+    let reconnectDelay = 2000;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
 
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data);
-        if (msg.type === "full_state" || msg.type === "state_update") {
-          setState(msg.data);
+    function connect() {
+      if (closed) return;
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === "full_state" || msg.type === "state_update") {
+            setState(msg.data);
+          }
+        } catch (err) {
+          console.warn("WS parse error:", err);
         }
-      } catch {}
-    };
+      };
 
-    ws.onclose = () => {
-      // Reconnect after 5s
-      setTimeout(() => {
-        // Re-trigger effect by setting loading
-        useStore.getState().setLoading(true);
-        fetch("/api/state")
-          .then((r) => r.json())
-          .then(setState)
-          .catch((e) => setError(e.message));
-      }, 5000);
-    };
+      ws.onopen = () => {
+        reconnectDelay = 2000; // reset backoff on successful connect
+      };
 
-    return () => ws.close();
+      ws.onclose = () => {
+        if (closed) return;
+        // Exponential backoff: 2s, 4s, 8s, max 30s
+        reconnectTimer = setTimeout(() => {
+          connect();
+        }, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      ws?.close();
+    };
   }, []);
 
   if (loading) {
@@ -115,12 +132,15 @@ export function App() {
           {activePanel === "tree" && <FileTreePanel />}
           {activePanel === "editor" && <EditorPanel />}
         </div>
-        <nav class="tab-bar">
+        <nav class="tab-bar" role="tablist" aria-label="Dashboard panels">
           {(["graph", "tree", "editor"] as PanelId[]).map((p) => (
             <button
               key={p}
               class={`tab ${activePanel === p ? "active" : ""}`}
               onClick={() => setActivePanel(p)}
+              role="tab"
+              aria-selected={activePanel === p}
+              aria-label={p === "graph" ? "Infrastructure map" : p === "tree" ? "File explorer" : "Code editor"}
             >
               {p === "graph" ? "Map" : p === "tree" ? "Files" : "Editor"}
             </button>

@@ -12,7 +12,6 @@
     "preact": "^10.22.0",
     "cytoscape": "^3.30.0",
     "cytoscape-fcose": "^2.2.0",
-    "cytoscape-dagre": "^2.5.0",
     "@codemirror/view": "^6.28.0",
     "@codemirror/state": "^6.4.0",
     "@codemirror/lang-python": "^6.1.0",

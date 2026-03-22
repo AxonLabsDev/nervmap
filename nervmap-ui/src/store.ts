@@ -60,12 +60,9 @@ export const useStore = create<Store>((set, get) => ({
     const s = get().state;
     if (!s) return;
 
-    // Find chain containing this service
+    // Find chain containing this service (exact match only)
     const chain = s.ai_chains?.find(
-      (c) =>
-        c.id === id ||
-        c.agent?.pid.toString() === id.split(":").pop() ||
-        c.id.includes(id)
+      (c) => c.id === id || c.linked_services?.includes(id)
     );
 
     set({

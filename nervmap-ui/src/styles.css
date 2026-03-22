@@ -286,7 +286,7 @@ body {
   .panels {
     grid-template-columns: 200px 1fr;
   }
-  .editor-panel.desktop-only {
+  .panels .editor-panel {
     display: none;
   }
 }
