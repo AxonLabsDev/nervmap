@@ -25,5 +25,14 @@ source:
     - /opt/myapp
     - ~/projects/api
 
+ai:
+  profiles:                          # Custom AI agent signatures
+    # - agent_type: my-agent
+    #   display_name: "My Custom Agent"
+    #   cmdline_patterns: ["my-agent-server"]
+    #   provider: custom
+    #   backend_type: cloud
+    #   config_paths: ["{cwd}/my-agent.yml"]
+
 hooks:
   on_issue: "~/.nervmap/hooks/notify.sh"

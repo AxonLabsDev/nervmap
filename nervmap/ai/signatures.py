@@ -125,18 +125,63 @@ BACKEND_SIGNATURES: list[BackendSignature] = [
 ]
 
 
-def match_agent(cmdline: str) -> AgentSignature | None:
+def load_custom_profiles(cfg: dict) -> tuple[list[AgentSignature], list[BackendSignature]]:
+    """Load custom agent/backend profiles from .nervmap.yml ai section.
+
+    Example config:
+        ai:
+          profiles:
+            - agent_type: my-agent
+              display_name: My Custom Agent
+              cmdline_patterns: ["my-agent-server"]
+              provider: openai
+              backend_type: cloud
+              config_paths: ["{cwd}/my-agent.yml"]
+    """
+    extra_agents: list[AgentSignature] = []
+    extra_backends: list[BackendSignature] = []
+
+    profiles = cfg.get("ai", {}).get("profiles", [])
+    for p in profiles:
+        if not isinstance(p, dict):
+            continue
+        if "agent_type" in p:
+            extra_agents.append(AgentSignature(
+                agent_type=p["agent_type"],
+                display_name=p.get("display_name", p["agent_type"]),
+                cmdline_patterns=p.get("cmdline_patterns", []),
+                provider=p.get("provider", "custom"),
+                backend_type=p.get("backend_type", "cloud"),
+                config_paths=p.get("config_paths", []),
+                env_signatures=p.get("env_signatures", []),
+            ))
+        elif "backend_type" in p:
+            extra_backends.append(BackendSignature(
+                backend_type=p["backend_type"],
+                display_name=p.get("display_name", p["backend_type"]),
+                cmdline_patterns=p.get("cmdline_patterns", []),
+                port_flag=p.get("port_flag", "--port"),
+                host_flag=p.get("host_flag", "--host"),
+                model_flag=p.get("model_flag", "--model"),
+            ))
+
+    return extra_agents, extra_backends
+
+
+def match_agent(cmdline: str, extra: list[AgentSignature] | None = None) -> AgentSignature | None:
     """Match a process cmdline against known agent signatures."""
-    for sig in AGENT_SIGNATURES:
+    all_sigs = AGENT_SIGNATURES + (extra or [])
+    for sig in all_sigs:
         for pattern in sig.cmdline_patterns:
             if re.search(pattern, cmdline):
                 return sig
     return None
 
 
-def match_backend(cmdline: str) -> BackendSignature | None:
+def match_backend(cmdline: str, extra: list[BackendSignature] | None = None) -> BackendSignature | None:
     """Match a process cmdline against known backend signatures."""
-    for sig in BACKEND_SIGNATURES:
+    all_sigs = BACKEND_SIGNATURES + (extra or [])
+    for sig in all_sigs:
         for pattern in sig.cmdline_patterns:
             if re.search(pattern, cmdline):
                 return sig

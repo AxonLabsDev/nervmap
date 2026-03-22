@@ -12,7 +12,7 @@ from nervmap.ai.models import (
 )
 from nervmap.ai.signatures import (
     AGENT_SIGNATURES, BACKEND_SIGNATURES,
-    match_agent, match_backend,
+    match_agent, match_backend, load_custom_profiles,
 )
 from nervmap.ai.config_resolver import ConfigResolver
 
@@ -27,6 +27,8 @@ class AICollector:
         self.config_resolver = ConfigResolver()
         self._tmux_panes: dict[int, str] | None = None  # pid -> session
         self._ttyd_map: dict[int, dict] | None = None    # pid -> {port, session}
+        # Load custom profiles from .nervmap.yml
+        self._extra_agents, self._extra_backends = load_custom_profiles(self.cfg)
 
     def collect(self) -> list[AIChain]:
         """Run full AI discovery and return chains."""
@@ -46,7 +48,7 @@ class AICollector:
             if "ttyd" in cmdline:
                 self._parse_ttyd_cmdline(pid, cmdline)
 
-            agent_sig = match_agent(cmdline)
+            agent_sig = match_agent(cmdline, self._extra_agents)
             if agent_sig:
                 cwd = self._read_cwd(pid)
                 agents_raw.append({
@@ -56,7 +58,7 @@ class AICollector:
                     "signature": agent_sig,
                 })
 
-            backend_sig = match_backend(cmdline)
+            backend_sig = match_backend(cmdline, self._extra_backends)
             if backend_sig:
                 backends_raw.append({
                     "pid": pid,
