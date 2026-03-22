@@ -85,10 +85,13 @@ def check_circular_dependency(state: SystemState, cfg: dict) -> list[Issue]:
 
     # Build adjacency list from connections (skip associations — not dependencies)
     graph: dict[str, set[str]] = {}
+    # Track edge types for cycle analysis
+    edge_types: dict[tuple[str, str], str] = {}
     for conn in state.connections:
         if conn.type == "association":
             continue
         graph.setdefault(conn.source, set()).add(conn.target)
+        edge_types[(conn.source, conn.target)] = conn.type
 
     # DFS cycle detection with canonical deduplication
     visited: set[str] = set()
@@ -102,10 +105,31 @@ def check_circular_dependency(state: SystemState, cfg: dict) -> list[Issue]:
             if cycle_nodes not in cycles_found:
                 cycles_found.add(cycle_nodes)
                 cycle_path = path[cycle_start:] + [node]
+
+                # Skip cycles where ALL edges are declared (depends_on) —
+                # these are intentional compose configurations (e.g. Nextcloud AIO)
+                all_declared = True
+                all_inferred = True
+                for i in range(len(cycle_path) - 1):
+                    etype = edge_types.get((cycle_path[i], cycle_path[i + 1]), "")
+                    if etype != "declared":
+                        all_declared = False
+                    if etype != "inferred":
+                        all_inferred = False
+                if all_declared:
+                    return
+
+                # 2-node inferred cycles (A→B→A) are common in reverse-proxy/app
+                # architectures — downgrade to info
+                cycle_len = len(cycle_path) - 1  # -1 because last == first
+                severity = "warning"
+                if cycle_len == 2 and all_inferred:
+                    severity = "info"
+
                 chain = " -> ".join(cycle_path)
                 issues.append(Issue(
                     rule_id="circular-dependency",
-                    severity="warning",
+                    severity=severity,
                     service=node,
                     message=f"Circular dependency detected: {chain}",
                     hint="Break the cycle by removing one dependency or using async communication.",

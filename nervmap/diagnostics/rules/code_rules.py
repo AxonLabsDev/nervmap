@@ -129,7 +129,23 @@ def check_code_entrypoint_mismatch(state: SystemState, cfg: dict) -> list[Issue]
     if not projects:
         return issues
 
+    # Base images where entrypoint comes from user code (not the image itself)
+    _BASE_IMAGE_PREFIXES = (
+        "python", "node", "alpine", "ubuntu", "debian", "centos", "fedora",
+        "golang", "ruby", "perl", "php", "openjdk", "amazoncorretto",
+        "mcr.microsoft.com", "scratch", "busybox",
+    )
+
     for proj in projects:
+        # If FROM is a specific app image (not a base image), entrypoint comes
+        # from that image, not from the project code — skip the check.
+        from_image = proj.metadata.get("dockerfile_from_image", "")
+        if from_image:
+            image_name = from_image.split(":")[0].split("/")[-1].lower()
+            is_base_image = any(image_name.startswith(p) for p in _BASE_IMAGE_PREFIXES)
+            if not is_base_image:
+                continue
+
         for key in ("dockerfile_cmd", "dockerfile_entrypoint"):
             cmd_str = proj.metadata.get(key, "")
             if not cmd_str:

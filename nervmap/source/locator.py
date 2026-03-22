@@ -141,10 +141,11 @@ class ProjectLocator:
                 metadata["dockerfile_cmd"] = df["cmd"]
             if df.get("entrypoint"):
                 metadata["dockerfile_entrypoint"] = df["entrypoint"]
-            # Add EXPOSE ports
-            for p in df.get("expose", []):
-                if p not in port_bindings:
-                    port_bindings.append(p)
+            if df.get("from_image"):
+                metadata["dockerfile_from_image"] = df["from_image"]
+            # Store EXPOSE ports separately — they're infra declarations, not code
+            if df.get("expose"):
+                metadata["dockerfile_expose_ports"] = df["expose"]
         else:
             metadata["has_dockerfile"] = False
 
