@@ -253,6 +253,16 @@ def scan(ctx, as_json, quiet, deep, no_code):
         except Exception:
             logger.debug("Source code analysis failed", exc_info=True)
 
+    # AI agent discovery (unless --no-code which also disables AI)
+    if not no_code:
+        try:
+            from nervmap.ai.collector import AICollector
+            ai_collector = AICollector(cfg)
+            state.ai_chains = ai_collector.collect()
+            logger.debug("AI discovery: %d chains found", len(state.ai_chains))
+        except Exception:
+            logger.debug("AI collector failed", exc_info=True)
+
     runner = RuleRunner()
     issues = runner.evaluate(state, cfg)
     logger.debug("Diagnostics complete: %d issues found", len(issues))
@@ -265,6 +275,11 @@ def scan(ctx, as_json, quiet, deep, no_code):
     else:
         renderer = ConsoleRenderer()
         renderer.render(state, issues, elapsed, quiet=quiet)
+        # Render AI chains if found
+        if state.ai_chains:
+            from nervmap.ai.console import AIRenderer
+            ai_renderer = AIRenderer()
+            ai_renderer.render(state.ai_chains)
 
     # Fire hooks
     if not no_hooks:
@@ -386,6 +401,30 @@ def code(ctx, path, as_json):
     else:
         console = ConsoleRenderer()
         console.render_code(projects)
+
+
+@main.command()
+@click.option("--json", "as_json", is_flag=True, help="JSON output.")
+@click.pass_context
+def ai(ctx, as_json):
+    """Map AI agents, LLM backends, and execution chains."""
+    from nervmap.ai.collector import AICollector
+    from nervmap.ai.console import AIRenderer
+
+    cfg = load_config(ctx.obj.get("config_path"))
+    as_json = as_json or ctx.obj.get("json", False)
+
+    collector = AICollector(cfg)
+    chains = collector.collect()
+
+    if as_json:
+        click.echo(json_mod.dumps(
+            {"ai_chains": [c.to_dict() for c in chains]},
+            indent=2, default=str,
+        ))
+    else:
+        renderer = AIRenderer()
+        renderer.render(chains)
 
 
 @main.command("version")

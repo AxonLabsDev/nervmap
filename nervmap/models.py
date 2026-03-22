@@ -86,6 +86,7 @@ class SystemState:
     disk_usage: dict[str, float] = field(default_factory=dict)
     memory: dict = field(default_factory=dict)
     projects: list = field(default_factory=list)
+    ai_chains: list = field(default_factory=list)
 
     def service_by_id(self, sid: str) -> Service | None:
         for s in self.services:
@@ -103,4 +104,6 @@ class SystemState:
         }
         if self.projects:
             result["projects"] = [p.to_dict() for p in self.projects]
+        if self.ai_chains:
+            result["ai_chains"] = [c.to_dict() for c in self.ai_chains]
         return result

@@ -44,6 +44,12 @@ def get_all_rules() -> list[RuleFunc]:
         check_code_env_example_drift,
         check_code_dockerfile_no_healthcheck,
     )
+    from nervmap.ai.rules import (
+        check_ai_backend_down,
+        check_ai_model_missing,
+        check_ai_config_missing,
+        check_ai_orphan_backend,
+    )
 
     return [
         check_port_conflict,
@@ -67,4 +73,8 @@ def get_all_rules() -> list[RuleFunc]:
         check_code_entrypoint_mismatch,
         check_code_env_example_drift,
         check_code_dockerfile_no_healthcheck,
+        check_ai_backend_down,
+        check_ai_model_missing,
+        check_ai_config_missing,
+        check_ai_orphan_backend,
     ]
