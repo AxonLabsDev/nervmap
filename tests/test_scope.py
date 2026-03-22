@@ -31,7 +31,7 @@ class TestApplyScope:
                 Connection(source="docker:openrag-backend", target="systemd:openrag-embeddings", type="inferred"),
                 Connection(source="docker:gitea", target="systemd:nginx", type="inferred"),
             ],
-            listening_ports={8900: "127.0.0.1", 3000: "127.0.0.1", 3080: "127.0.0.1", 80: "0.0.0.0", 5558: "127.0.0.1"},
+            listening_ports={8900: "127.0.0.1", 3000: "127.0.0.1", 3080: "10.0.0.1", 80: "0.0.0.0", 5558: "127.0.0.1"},
         )
 
     def test_none_scope_returns_same(self):
