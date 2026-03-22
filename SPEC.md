@@ -100,7 +100,7 @@ CLI Entry Point (Click)
 | `--no-hooks` | Skip shell hook execution |
 | `--config <path>` | Custom config file path |
 
-## Diagnostic Rules (21)
+## Diagnostic Rules (25)
 
 ### Network (4)
 - `port-conflict` — host-mapped ports only, docker-proxy filtered

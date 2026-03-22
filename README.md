@@ -340,7 +340,7 @@ Hook data is always redacted (no secrets passed to external scripts).
 - [ ] Kubernetes support
 - [ ] Community diagnostic rules (YAML format)
 - [ ] Incremental scan cache (SQLite)
-- [ ] Custom AI agent profiles in `.nervmap.yml`
+- [x] Custom AI agent profiles in `.nervmap.yml`
 
 ---
 
