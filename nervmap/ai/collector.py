@@ -32,14 +32,19 @@ class AICollector:
         """Run full AI discovery and return chains."""
         chains: list[AIChain] = []
 
-        # Phase 1: Scan all processes for agents + backends
+        # Phase 1: Scan all processes for agents + backends + ttyd
         agents_raw = []
         backends_raw = []
+        self._ttyd_map = {}
 
         for pid in self._iter_pids():
             cmdline = self._read_cmdline(pid)
             if not cmdline:
                 continue
+
+            # Detect ttyd during same scan
+            if "ttyd" in cmdline:
+                self._parse_ttyd_cmdline(pid, cmdline)
 
             agent_sig = match_agent(cmdline)
             if agent_sig:
@@ -59,9 +64,8 @@ class AICollector:
                     "signature": backend_sig,
                 })
 
-        # Phase 2: Resolve tmux sessions + ttyd terminals
+        # Phase 2: Resolve tmux sessions (ttyd already loaded in Phase 1)
         self._load_tmux_panes()
-        self._load_ttyd_map()
 
         # Build backend nodes
         backend_nodes: list[BackendNode] = []
@@ -125,7 +129,7 @@ class AICollector:
             trace_config_chain(conf)
 
         # Backend node
-        backend_node = self._match_backend_for_agent(sig, backends)
+        backend_node = self._match_backend_for_agent(sig, backends, pid)
 
         chain = AIChain(
             id=f"ai:{sig.agent_type}:{pid}",
@@ -185,14 +189,15 @@ class AICollector:
             ports=[port] if port else [],
         )
 
-    def _match_backend_for_agent(self, sig, backends: list[BackendNode]) -> BackendNode:
+    def _match_backend_for_agent(self, sig, backends: list[BackendNode],
+                                 pid: int = 0) -> BackendNode:
         """Match an agent to its LLM backend."""
         if sig.backend_type == "cloud":
             return BackendNode(
                 backend_type="cloud",
                 provider=sig.provider,
                 endpoint=f"api.{sig.provider}.com",
-                auth_method=self._detect_auth_method(sig),
+                auth_method=self._detect_auth_method(sig, pid),
             )
         # For local agents, find matching backend by provider
         for bk in backends:
@@ -253,49 +258,50 @@ class AICollector:
         except Exception:
             logger.debug("Cannot enumerate tmux panes", exc_info=True)
 
-    def _load_ttyd_map(self):
-        """Load ttyd instances with port and target session."""
-        self._ttyd_map = {}
-        for pid in self._iter_pids():
-            cmdline = self._read_cmdline(pid)
-            if not cmdline or "ttyd" not in cmdline:
-                continue
-            args = cmdline.split()
-            port = None
-            bind_addr = None
-            session_target = ""
+    def _parse_ttyd_cmdline(self, pid: int, cmdline: str):
+        """Parse a ttyd process cmdline and store in ttyd map."""
+        args = cmdline.split()
+        port = None
+        bind_addr = None
+        session_target = ""
 
-            for i, arg in enumerate(args):
-                if arg == "-p" and i + 1 < len(args):
-                    try:
-                        port = int(args[i + 1])
-                    except ValueError:
-                        pass
-                elif arg == "-i" and i + 1 < len(args):
-                    bind_addr = args[i + 1]
+        for i, arg in enumerate(args):
+            if arg == "-p" and i + 1 < len(args):
+                try:
+                    port = int(args[i + 1])
+                except ValueError:
+                    pass
+            elif arg == "-i" and i + 1 < len(args):
+                bind_addr = args[i + 1]
 
-            # Extract target session from tmux command at the end
-            if "tmux" in cmdline:
-                tmux_idx = cmdline.index("tmux")
-                tmux_part = cmdline[tmux_idx:]
-                # Look for session name after -s or -t flags, or after attach/new-session
-                s_match = re.search(r"(?:-[st]|attach\s+-t)\s+(\S+)", tmux_part)
-                if s_match:
-                    session_target = s_match.group(1)
+        # Extract target session from tmux command at the end
+        if "tmux" in cmdline:
+            tmux_idx = cmdline.index("tmux")
+            tmux_part = cmdline[tmux_idx:]
+            s_match = re.search(r"(?:-[st]|attach\s+-t)\s+(\S+)", tmux_part)
+            if s_match:
+                session_target = s_match.group(1)
 
-            if port:
-                self._ttyd_map[pid] = {
-                    "port": port,
-                    "bind": bind_addr,
-                    "session": session_target,
-                }
+        if port:
+            self._ttyd_map[pid] = {
+                "port": port,
+                "bind": bind_addr,
+                "session": session_target,
+            }
 
-    def _detect_auth_method(self, sig) -> str:
-        """Detect if agent uses API key or OAuth."""
-        # Check if any env signature key is set
-        for env_key in sig.env_signatures:
-            if env_key.endswith("_KEY"):
-                return "api_key"
+    def _detect_auth_method(self, sig, pid: int = 0) -> str:
+        """Detect if agent uses API key or OAuth by checking process env."""
+        if not pid:
+            return "oauth"
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                data = f.read()
+            env_str = data.decode("utf-8", errors="replace")
+            for env_key in sig.env_signatures:
+                if env_key.endswith("_KEY") and env_key + "=" in env_str:
+                    return "api_key"
+        except (OSError, PermissionError):
+            pass
         return "oauth"
 
     @staticmethod

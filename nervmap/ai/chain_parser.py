@@ -177,13 +177,13 @@ def _parse_markdown_config(config: ConfigNode, seen: set[str], depth: int):
         config.role = "instruction file"
 
     # Extract file path references from content
-    # Match absolute paths like /home/user/project/identity.md
+    # Match absolute paths like /home/user/project/config.md
     path_pattern = re.compile(r'(?:^|\s|`|"|\')(/[a-zA-Z0-9_./-]+\.[a-zA-Z]{1,10})(?:\s|`|"|\'|$|,|\))', re.MULTILINE)
     for match in path_pattern.finditer(content):
         ref_path = match.group(1)
         # Skip URLs and common non-config patterns
         if "://" in ref_path or ref_path.startswith("/proc/") or \
-           ref_path.startswith("/dev/") or ref_path.startswith("/tmp/"):
+           ref_path.startswith("/dev/") or ref_path.startswith("/sys/"):
             continue
         if not os.path.isfile(ref_path) or ref_path in seen:
             continue
@@ -203,7 +203,7 @@ def _parse_markdown_config(config: ConfigNode, seen: set[str], depth: int):
         trace_config_chain(child, seen, depth + 1)
         config.children.append(child)
 
-    # Also extract cat/source commands: `cat /home/user/project/rules.md`
+    # Also extract cat/source commands referencing config files
     cat_pattern = re.compile(r'(?:cat|source|\.)\s+(/[a-zA-Z0-9_./-]+)')
     for match in cat_pattern.finditer(content):
         ref_path = match.group(1)
