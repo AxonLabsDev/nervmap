@@ -53,5 +53,7 @@ class JsonRenderer:
                         })
             if connections_to_infra:
                 output["connections_to_infra"] = connections_to_infra
+        if state.ai_chains:
+            output["ai_chains"] = [c.to_dict() for c in state.ai_chains]
         json.dump(output, sys.stdout, indent=2, default=str)
         sys.stdout.write("\n")
