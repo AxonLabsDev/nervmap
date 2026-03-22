@@ -1,15 +1,16 @@
-# NervMap — Specification v0.4.0
+# NervMap — Specification v0.5.0
 
 > `docker ps` shows containers. NervMap shows why your app is down.
 
-## Status: v0.4.0 — COMPLETE (10/10 review score)
+## Status: v0.5.0 — COMPLETE (9.5/10 review score)
 
-- 179 tests passing, 77% coverage
+- 199 tests passing
 - 0% false positive rate
 - 26 diagnostic rules (15 infra + 6 code + 5 AI)
 - Source code analysis with 4-strategy linking
 - AI agent chain mapping with config tracing + proxy detection + consumer tracking
-- `nervmap code` and `nervmap ai` subcommands
+- Web dashboard: FastAPI + Preact + Cytoscape.js + CodeMirror 6 (~430KB gzip)
+- `nervmap code`, `nervmap ai`, and `nervmap serve` subcommands
 
 ## Architecture
 
@@ -222,10 +223,30 @@ Recursive parsing of config file contents to find referenced files:
 - `ai-orphan-backend` — LLM running with no agent connected (info)
 - `ai-gpu-overcommit` — GPU memory >90% with multiple LLM backends (warning)
 
+## Web Dashboard (v0.5)
+
+### Backend
+- FastAPI (optional dep: `pip install nervmap[web]`)
+- `nervmap serve` CLI command with `--port`, `--host`, `--open` flags
+- REST: `/api/state`, `/api/tree`, `/api/file`, `/api/rescan`, `/health`
+- WebSocket `/ws`: real-time state push (10s scan loop with hash dedup)
+- PathGuard: realpath jail + extension whitelist + blocked patterns
+- `asyncio.Lock` on scan, MAX_WS_CLIENTS=50, lifespan context manager
+- Shared `scanner.py` module (used by both CLI and web)
+
+### Frontend
+- Preact + Zustand + Cytoscape.js (fcose layout) + CodeMirror 6
+- 3 panels: graph (center), file tree (left), editor (right)
+- Cross-panel sync via Zustand store (click node -> highlights chain -> opens config)
+- Mobile: bottom tab bar with swipe, graph primary
+- Responsive: desktop 3-panel, tablet 2-panel, mobile single-panel
+- Dark theme, ~430KB gzip total
+- WebSocket auto-reconnect with exponential backoff (2s-30s)
+
 ## Roadmap
 
-- v0.4: watch mode, REST API, WebSocket, incremental SQLite cache, plugin system
-- v0.5: Cytoscape.js web dashboard, community rules YAML
+- v0.6: watch mode, incremental SQLite cache, plugin system
+- v0.7: community rules YAML
 - v1.0: Go rewrite (single binary), Kubernetes support
 
 ## License

@@ -6,7 +6,7 @@ Your infrastructure's nervous system. Discovers services, maps dependencies, ana
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-179%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-199%20passed-brightgreen.svg)]()
 
 ---
 
@@ -59,6 +59,11 @@ nervmap code /opt/myproject --json   # JSON output for code analysis
 # AI agent mapping
 nervmap ai                           # Map all AI agents + LLM backends
 nervmap ai --json                    # JSON output
+
+# Web dashboard
+nervmap serve                        # Launch dashboard on http://127.0.0.1:9000
+nervmap serve --host 0.0.0.0 --port 8080  # Custom bind
+nervmap serve --open                 # Auto-open browser
 
 # Other
 nervmap version                      # Show version
@@ -255,6 +260,29 @@ Every issue includes:
 
 ---
 
+## Web Dashboard (v0.5)
+
+Launch a browser-based dashboard with `nervmap serve`:
+
+```bash
+pip install nervmap[web]    # install web dependencies (FastAPI + uvicorn)
+nervmap serve               # open http://127.0.0.1:9000
+```
+
+3-panel interface:
+- **Graph** (center) — interactive Cytoscape.js graph showing services, dependencies, AI chains
+- **File Tree** (left) — browse config files and project directories
+- **Code Editor** (right) — CodeMirror 6 viewer with syntax highlighting
+
+Features:
+- Real-time updates via WebSocket (10s scan loop)
+- Click a node to highlight its chain + open related configs
+- Mobile responsive (bottom tab bar on phones)
+- Filesystem security: PathGuard with realpath jail, extension whitelist, blocked patterns
+- ~430 KB gzip total (Preact + Cytoscape.js + CodeMirror 6)
+
+---
+
 ## Security
 
 - **Secrets are redacted by default** in all output (JSON, CLI, hooks)
@@ -335,14 +363,14 @@ Hook data is always redacted (no secrets passed to external scripts).
 
 - [x] Source code analysis (v0.2)
 - [x] AI agent chain mapping (v0.3)
+- [x] `nervmap serve` — REST API + WebSocket (v0.5)
+- [x] Web dashboard — Cytoscape.js + CodeMirror + Preact (v0.5)
+- [x] Custom AI agent profiles in `.nervmap.yml`
 - [ ] `nervmap watch` — live monitoring daemon
-- [ ] `nervmap serve` — REST API + WebSocket
-- [ ] Web dashboard (Cytoscape.js graph)
 - [ ] Plugin system (subprocess JSON protocol)
 - [ ] Kubernetes support
 - [ ] Community diagnostic rules (YAML format)
 - [ ] Incremental scan cache (SQLite)
-- [x] Custom AI agent profiles in `.nervmap.yml`
 
 ---
 
