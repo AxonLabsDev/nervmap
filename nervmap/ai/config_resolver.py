@@ -119,9 +119,18 @@ class ConfigResolver:
             return "model"
         return "settings"
 
+    # Directories that typically contain noise (vendored deps, caches)
+    _FD_NOISE_DIRS = (
+        "/node_modules/", "/vendor/", "/.cache/", "/site-packages/",
+        "/.npm/", "/.yarn/", "/dist/", "/build/",
+    )
+
     @staticmethod
     def _scan_open_files(pid: int) -> list[str]:
-        """Read /proc/PID/fd to find open config/model files."""
+        """Read /proc/PID/fd to find open config/model files.
+
+        Filters out vendored/cache paths to avoid noise from node_modules etc.
+        """
         configs = []
         fd_dir = f"/proc/{pid}/fd"
         try:
@@ -135,6 +144,9 @@ class ConfigResolver:
                         ".md", ".json", ".yml", ".yaml", ".toml",
                         ".gguf", ".bin", ".safetensors", ".env",
                     )):
+                        # Skip vendored/cache paths (node_modules, site-packages, etc.)
+                        if any(noise in target for noise in ConfigResolver._FD_NOISE_DIRS):
+                            continue
                         configs.append(target)
                 except (OSError, PermissionError):
                     continue

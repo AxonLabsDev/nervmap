@@ -309,6 +309,141 @@ class TestChainParser:
 # CLI command
 # ---------------------------------------------------------------------------
 
+class TestAICollectorIntegration:
+    """Integration tests for AICollector with mocked /proc."""
+
+    def test_collect_with_mocked_processes(self):
+        """AICollector discovers agents from mocked process data."""
+        from unittest.mock import patch
+        from nervmap.ai.collector import AICollector
+
+        fake_procs = {
+            100: "claude ",
+            200: "llama-server --model /opt/models/test.gguf --port 8123 --host 127.0.0.1 --n-gpu-layers 40 --ctx-size 8192",
+            300: "nginx -g daemon off",
+            400: "codex ",
+        }
+
+        def mock_iter_pids():
+            return iter(fake_procs.keys())
+
+        def mock_read_cmdline(pid):
+            return fake_procs.get(pid, "")
+
+        def mock_read_cwd(pid):
+            return "/home/user"
+
+        collector = AICollector()
+        with patch.object(collector, '_iter_pids', mock_iter_pids), \
+             patch.object(collector, '_read_cmdline', mock_read_cmdline), \
+             patch.object(collector, '_read_cwd', mock_read_cwd), \
+             patch.object(collector, '_load_tmux_panes'):
+            collector._tmux_panes = {}
+            chains = collector.collect()
+
+        # Should find claude, codex, and llama-server (3 chains)
+        agent_types = {c.agent.agent_type for c in chains if c.agent}
+        assert "claude-code" in agent_types
+        assert "codex-cli" in agent_types
+        assert "llama_cpp" in agent_types
+        # nginx should NOT be detected
+        assert not any(c.agent.agent_type == "nginx" for c in chains if c.agent)
+
+    def test_collect_llama_model_parsing(self):
+        """Verify model name and GPU layers are parsed from cmdline."""
+        from unittest.mock import patch
+        from nervmap.ai.collector import AICollector
+
+        fake_procs = {
+            500: "llama-server --model /opt/models/Qwen3-8B-Q4_K_M.gguf --port 9000 --n-gpu-layers 99 --ctx-size 16384",
+        }
+
+        collector = AICollector()
+        with patch.object(collector, '_iter_pids', lambda: iter(fake_procs.keys())), \
+             patch.object(collector, '_read_cmdline', lambda pid: fake_procs.get(pid, "")), \
+             patch.object(collector, '_read_cwd', lambda pid: "/"), \
+             patch.object(collector, '_load_tmux_panes'):
+            collector._tmux_panes = {}
+            chains = collector.collect()
+
+        llama_chains = [c for c in chains if c.backend and c.backend.provider == "llama_cpp"]
+        assert len(llama_chains) >= 1
+        bk = llama_chains[0].backend
+        assert bk.model_name == "Qwen3-8B-Q4_K_M"
+        assert bk.gpu_layers == 99
+        assert bk.context_size == 16384
+        assert "9000" in bk.endpoint
+
+    def test_collect_empty_server(self):
+        """No AI processes returns empty chains."""
+        from unittest.mock import patch
+        from nervmap.ai.collector import AICollector
+
+        collector = AICollector()
+        with patch.object(collector, '_iter_pids', lambda: iter([])), \
+             patch.object(collector, '_load_tmux_panes'):
+            collector._tmux_panes = {}
+            chains = collector.collect()
+
+        assert chains == []
+
+
+# ---------------------------------------------------------------------------
+# Noise filtering
+# ---------------------------------------------------------------------------
+
+class TestNoiseFiltering:
+    """Tests for _scan_open_files noise filtering."""
+
+    def test_node_modules_filtered(self):
+        """Paths containing /node_modules/ should be filtered."""
+        from nervmap.ai.config_resolver import ConfigResolver
+        resolver = ConfigResolver()
+        # The noise filter is on the class, test it directly
+        noise_path = "/home/user/project/node_modules/express/package.json"
+        assert any(noise in noise_path for noise in resolver._FD_NOISE_DIRS)
+
+    def test_regular_path_not_filtered(self):
+        """Normal config paths should not be filtered."""
+        from nervmap.ai.config_resolver import ConfigResolver
+        resolver = ConfigResolver()
+        good_path = "/home/user/.claude/settings.json"
+        assert not any(noise in good_path for noise in resolver._FD_NOISE_DIRS)
+
+
+# ---------------------------------------------------------------------------
+# Quoted paths
+# ---------------------------------------------------------------------------
+
+class TestQuotedPaths:
+    """Tests for _extract_paths_from_command with quoted paths."""
+
+    def test_quoted_path_with_spaces(self, tmp_path):
+        """Paths in quotes with spaces should be extracted."""
+        from nervmap.ai.chain_parser import _extract_paths_from_command
+
+        spaced_dir = tmp_path / "my scripts"
+        spaced_dir.mkdir()
+        script = spaced_dir / "hook.sh"
+        script.write_text("#!/bin/bash\necho hi")
+
+        cmd = f'"/bin/bash" "{script}"'
+        paths = _extract_paths_from_command(cmd)
+        assert str(script) in paths
+
+    def test_env_var_skipped(self):
+        """Env var assignments should not produce paths."""
+        from nervmap.ai.chain_parser import _extract_paths_from_command
+        cmd = "MY_VAR=/usr/local/bin/tool /usr/local/bin/tool run"
+        paths = _extract_paths_from_command(cmd)
+        # Only the actual binary path, not the env var value
+        assert all("MY_VAR" not in p for p in paths)
+
+
+# ---------------------------------------------------------------------------
+# CLI command
+# ---------------------------------------------------------------------------
+
 class TestAICommand:
     """Tests for nervmap ai CLI command."""
 

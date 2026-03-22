@@ -87,20 +87,28 @@ def check_ai_orphan_backend(state: SystemState, cfg: dict) -> list[Issue]:
     if not chains:
         return issues
 
-    # Collect all backend PIDs that are referenced by agent chains
-    referenced_pids: set[int] = set()
-    standalone_backends: list = []
+    # Separate agent chains (claude, codex, gemini, etc.) from standalone backends.
+    # A standalone backend is one created by the collector when an LLM server
+    # (llama-server, ollama, etc.) has no agent pointing to it.
+    agent_chains = []
+    standalone_chains = []
 
     for chain in chains:
-        if chain.backend and chain.backend.pid:
-            if chain.agent and chain.agent.agent_type != chain.backend.provider:
-                # Agent references this backend
-                referenced_pids.add(chain.backend.pid)
-            elif chain.agent and chain.agent.display_name.endswith("(standalone)"):
-                standalone_backends.append(chain)
+        if chain.agent and chain.agent.display_name.endswith("(standalone)"):
+            standalone_chains.append(chain)
+        else:
+            agent_chains.append(chain)
 
-    for chain in standalone_backends:
-        if chain.backend and chain.backend.pid not in referenced_pids:
+    # Collect all backend PIDs referenced by real agent chains
+    referenced_pids: set[int] = set()
+    for chain in agent_chains:
+        if chain.backend and chain.backend.pid:
+            referenced_pids.add(chain.backend.pid)
+
+    # A standalone backend whose PID is not referenced by any agent is orphaned
+    for chain in standalone_chains:
+        if chain.backend and chain.backend.pid and \
+           chain.backend.pid not in referenced_pids:
             issues.append(Issue(
                 rule_id="ai-orphan-backend",
                 severity="info",

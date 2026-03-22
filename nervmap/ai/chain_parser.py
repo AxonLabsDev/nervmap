@@ -230,6 +230,7 @@ def _extract_paths_from_command(cmd: str) -> list[str]:
     """Extract executable/script paths from a shell command string.
 
     Skips paths that are values of env var assignments (VAR=/path/...).
+    Handles both unquoted and quoted paths (single/double quotes).
     """
     paths = []
 
@@ -237,7 +238,13 @@ def _extract_paths_from_command(cmd: str) -> list[str]:
     claude_dir = os.path.expanduser("~/.claude")
     cmd_expanded = cmd.replace("${CLAUDE_DIR}", claude_dir)
 
-    # Split on spaces, skip env var assignments (KEY=value)
+    # First pass: extract quoted paths (may contain spaces)
+    for match in re.finditer(r'["\'](/[^"\']+)["\']', cmd_expanded):
+        path = match.group(1)
+        if path not in paths and os.path.isfile(path):
+            paths.append(path)
+
+    # Second pass: extract unquoted tokens
     tokens = cmd_expanded.split()
     for token in tokens:
         if "=" in token and not token.startswith("/"):
