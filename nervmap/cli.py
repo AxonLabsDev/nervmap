@@ -414,8 +414,14 @@ def ai(ctx, as_json):
     cfg = load_config(ctx.obj.get("config_path"))
     as_json = as_json or ctx.obj.get("json", False)
 
+    # Build minimal state for consumer detection
+    try:
+        state = _collect(cfg)
+    except Exception:
+        state = None
+
     collector = AICollector(cfg)
-    chains = collector.collect()
+    chains = collector.collect(state=state)
 
     if as_json:
         click.echo(json_mod.dumps(

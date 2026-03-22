@@ -418,10 +418,11 @@ class AICollector:
         return None
 
     def _detect_consumers(self, chains: list[AIChain], state=None):
-        """Find processes that connect to backend/proxy ports (consumers).
+        """Find services that connect to backend/proxy ports.
 
-        Uses established TCP connections from SystemState if available,
-        otherwise uses /proc/net/tcp.
+        Matches established TCP connections (remote_port) against known
+        backend and proxy ports, then identifies the consumer by matching
+        the local_port to a known service in state.services.
         """
         if not state:
             return
@@ -438,26 +439,32 @@ class AICollector:
         if not port_to_chain:
             return
 
+        # Build reverse map: listening port -> service name
+        port_to_service: dict[int, str] = {}
+        for svc in state.services:
+            for p in svc.ports:
+                port_to_service[p] = svc.name
+
         # Check established connections for consumers
         established = getattr(state, "established", [])
         chain_consumers: dict[str, set[str]] = {}
 
         for conn in established:
-            remote_port = conn.get("remote_port") or conn.get("dst_port")
+            remote_port = conn.get("remote_port")
+            local_port = conn.get("local_port")
             if not remote_port or remote_port not in port_to_chain:
                 continue
             chain_id = port_to_chain[remote_port]
-            local_pid = conn.get("pid")
-            if not local_pid:
-                continue
-            # Try to identify the consumer by its process name
-            cmdline = self._read_cmdline(local_pid)
-            if not cmdline:
-                continue
-            # Extract a short consumer name
-            parts = cmdline.split()
-            name = os.path.basename(parts[0]) if parts else f"pid:{local_pid}"
-            chain_consumers.setdefault(chain_id, set()).add(name)
+
+            # Identify consumer: check if local_port belongs to a known service
+            consumer_name = port_to_service.get(local_port)
+            if consumer_name:
+                chain_consumers.setdefault(chain_id, set()).add(consumer_name)
+            else:
+                # Use local_addr:local_port as fallback identifier
+                local_addr = conn.get("local_addr", "?")
+                chain_consumers.setdefault(chain_id, set()).add(
+                    f"{local_addr}:{local_port}")
 
         # Assign consumers to chains
         for chain in chains:

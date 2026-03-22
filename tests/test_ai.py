@@ -507,6 +507,50 @@ class TestProxyDetection:
 # GPU overcommit rule
 # ---------------------------------------------------------------------------
 
+class TestConsumerDetection:
+    """Tests for consumer detection via established connections."""
+
+    def test_detect_consumer_by_service_port(self):
+        """Consumer detected by matching local_port to a known service."""
+        from nervmap.ai.collector import AICollector
+        chain = AIChain(
+            id="ai:llama:1",
+            agent=AgentNode(agent_type="llama_cpp", pid=1, cwd="/", cmdline="",
+                            display_name="llama"),
+            backend=BackendNode(backend_type="local", provider="llama_cpp",
+                                endpoint="127.0.0.1:8123", ports=[8123]),
+        )
+        state = SystemState(
+            services=[Service(id="process:myapp", name="myapp",
+                              type="process", status="running", ports=[8124])],
+            established=[{
+                "local_addr": "127.0.0.1", "local_port": 8124,
+                "remote_addr": "127.0.0.1", "remote_port": 8123,
+            }],
+        )
+        collector = AICollector()
+        collector._detect_consumers([chain], state)
+        assert "myapp" in chain.consumers
+
+    def test_no_consumer_no_match(self):
+        """No consumers when no established connections match."""
+        from nervmap.ai.collector import AICollector
+        chain = AIChain(
+            id="ai:llama:1",
+            agent=AgentNode(agent_type="llama_cpp", pid=1, cwd="/", cmdline="",
+                            display_name="llama"),
+            backend=BackendNode(backend_type="local", provider="llama_cpp",
+                                endpoint="127.0.0.1:8123", ports=[8123]),
+        )
+        state = SystemState(established=[{
+            "local_addr": "127.0.0.1", "local_port": 9999,
+            "remote_addr": "127.0.0.1", "remote_port": 5555,
+        }])
+        collector = AICollector()
+        collector._detect_consumers([chain], state)
+        assert chain.consumers == []
+
+
 class TestGPUOvercommit:
     """Tests for ai-gpu-overcommit rule."""
 
