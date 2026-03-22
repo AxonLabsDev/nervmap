@@ -45,7 +45,7 @@ CLI Entry Point (Click)
   |     +-- ChainParser (recursive file reference tracing)
   |     +-- Signatures (Claude Code, Codex, Gemini, llama.cpp, Ollama, vLLM, TGI)
   |     +-- AIRenderer (Rich tree view per chain)
-  |     +-- 4 AI diagnostic rules
+  |     +-- 5 AI diagnostic rules
   |
   +-- Topology Builder
   |     +-- DependencyMapper (TCP established, env vars, docker-compose, Docker networks)
@@ -86,6 +86,10 @@ CLI Entry Point (Click)
 | `nervmap deps --mermaid` | Mermaid diagram export |
 | `nervmap issues` | Show diagnosed issues |
 | `nervmap issues --critical` | Critical issues only |
+| `nervmap ai` | Map AI agents, LLM backends, and execution chains |
+| `nervmap ai --json` | AI chains as JSON |
+| `nervmap serve` | Launch web dashboard (requires `nervmap[web]`) |
+| `nervmap serve --port N` | Custom port (default 9000) |
 | `nervmap version` | Show version |
 
 ## Global Flags
