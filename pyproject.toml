@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nervmap"
-version = "0.1.0"
+version = "0.2.0"
 description = "Infrastructure cartography CLI — discover services, map dependencies, diagnose issues."
 readme = "README.md"
 license = {text = "MIT"}

@@ -52,7 +52,8 @@ class ConsoleRenderer:
         # Header
         header = Text()
         header.append("  NervMap", style="bold cyan")
-        header.append(" v0.1.0", style="dim")
+        from nervmap import __version__
+        header.append(f" v{__version__}", style="dim")
         header.append(f"  |  scanned in {elapsed:.1f}s", style="dim")
         self.console.print(Panel(header, border_style="cyan", box=box.ROUNDED))
 
@@ -189,3 +190,49 @@ class ConsoleRenderer:
             )
 
         self.console.print(table)
+
+    def render_code(self, projects):
+        """Render code analysis results."""
+        if not projects:
+            self.console.print("[dim]  No source code projects detected.[/dim]")
+            return
+
+        self.console.print()
+        self.console.print("[bold]  Code Analysis[/bold]")
+        self.console.print()
+
+        for proj in projects:
+            lang = proj.language.capitalize()
+            fw = f"/{proj.framework}" if proj.framework else ""
+            line = Text()
+            line.append(f"  {proj.name}", style="bold cyan")
+            line.append(f"  {lang}{fw}", style="yellow")
+            line.append(f"  | {proj.file_count} files", style="dim")
+            if proj.port_bindings:
+                line.append(f"  | ports: {proj.port_bindings}", style="dim")
+            if proj.env_refs:
+                line.append(f"  | {len(proj.env_refs)} env refs", style="dim")
+            if proj.linked_services:
+                line.append(f"  | linked: {', '.join(proj.linked_services)}", style="green")
+            self.console.print(line)
+
+    def render_code_summary(self, projects, issues):
+        """Render one-line code summary for scan output."""
+        if not projects:
+            return
+
+        for proj in projects:
+            lang = proj.language.capitalize()
+            fw = f"/{proj.framework}" if proj.framework else ""
+            code_issues = [i for i in issues if i.rule_id.startswith("code-")
+                           and (i.service in proj.linked_services or i.service == proj.name)]
+            n_issues = len(code_issues)
+            line = Text()
+            line.append("  Code: ", style="bold")
+            line.append(f"{lang}{fw}", style="yellow")
+            line.append(f" | {proj.file_count} files", style="dim")
+            if n_issues:
+                line.append(f" | {n_issues} issues", style="red")
+            else:
+                line.append(" | no issues", style="green")
+            self.console.print(line)

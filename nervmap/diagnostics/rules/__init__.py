@@ -36,6 +36,14 @@ def get_all_rules() -> list[RuleFunc]:
         check_disk_pressure,
         check_memory_oom_risk,
     )
+    from nervmap.diagnostics.rules.code_rules import (
+        check_code_port_drift,
+        check_code_env_missing,
+        check_code_dep_missing,
+        check_code_entrypoint_mismatch,
+        check_code_env_example_drift,
+        check_code_dockerfile_no_healthcheck,
+    )
 
     return [
         check_port_conflict,
@@ -53,4 +61,10 @@ def get_all_rules() -> list[RuleFunc]:
         check_circular_dependency,
         check_disk_pressure,
         check_memory_oom_risk,
+        check_code_port_drift,
+        check_code_env_missing,
+        check_code_dep_missing,
+        check_code_entrypoint_mismatch,
+        check_code_env_example_drift,
+        check_code_dockerfile_no_healthcheck,
     ]

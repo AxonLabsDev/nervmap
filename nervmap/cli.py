@@ -197,6 +197,7 @@ def main(ctx, as_json, quiet, deep, config_path, scope, show_secrets, verbose, n
     ctx.obj["scope"] = scope
     ctx.obj["show_secrets"] = show_secrets
     ctx.obj["no_hooks"] = no_hooks
+    ctx.obj["no_code"] = False
 
     if ctx.invoked_subcommand is None:
         ctx.invoke(scan)
@@ -206,8 +207,9 @@ def main(ctx, as_json, quiet, deep, config_path, scope, show_secrets, verbose, n
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
 @click.option("--quiet", is_flag=True, help="Show only issues, no service list.")
 @click.option("--deep", is_flag=True, help="Deep scan (parse config files).")
+@click.option("--no-code", "no_code", is_flag=True, help="Skip source code analysis.")
 @click.pass_context
-def scan(ctx, as_json, quiet, deep):
+def scan(ctx, as_json, quiet, deep, no_code):
     """Full infrastructure scan (default)."""
     import logging
     logger = logging.getLogger("nervmap.cli")
@@ -223,8 +225,9 @@ def scan(ctx, as_json, quiet, deep):
     deep = _get_flag(ctx, "deep", deep)
     show_secrets = ctx.obj.get("show_secrets", False)
     no_hooks = ctx.obj.get("no_hooks", False)
+    no_code = no_code or ctx.obj.get("no_code", False)
 
-    logger.debug("Starting scan (deep=%s, json=%s, quiet=%s)", deep, as_json, quiet)
+    logger.debug("Starting scan (deep=%s, json=%s, quiet=%s, no_code=%s)", deep, as_json, quiet, no_code)
 
     scope = ctx.obj.get("scope")
 
@@ -234,6 +237,21 @@ def scan(ctx, as_json, quiet, deep):
         state = _apply_scope(state, scope)
         logger.debug("Scope '%s': %d services after filtering", scope, len(state.services))
     logger.debug("Discovery complete: %d services, %d listening ports", len(state.services), len(state.listening_ports))
+
+    # Source code analysis (unless --no-code)
+    if not no_code:
+        try:
+            from nervmap.source.locator import ProjectLocator
+            from nervmap.source.linker import CodeLinker
+            locator = ProjectLocator(state, cfg)
+            projects = locator.locate()
+            if projects:
+                linker = CodeLinker()
+                linker.link(state.services, projects)
+                state.projects = projects
+                logger.debug("Code analysis: %d projects found", len(projects))
+        except Exception:
+            logger.debug("Source code analysis failed", exc_info=True)
 
     runner = RuleRunner()
     issues = runner.evaluate(state, cfg)
@@ -323,6 +341,51 @@ def issues(ctx, critical):
     else:
         renderer = ConsoleRenderer()
         renderer.render_issues(all_issues)
+
+
+@main.command()
+@click.argument("path", required=True)
+@click.option("--json", "as_json", is_flag=True, help="JSON output.")
+@click.pass_context
+def code(ctx, path, as_json):
+    """Analyze source code in a project directory."""
+    import os
+    from nervmap.source.locator import ProjectLocator
+    from nervmap.source.linker import CodeLinker
+    from nervmap.output.console import ConsoleRenderer
+
+    if not os.path.isdir(path):
+        click.echo(f"Error: {path} is not a directory.", err=True)
+        raise SystemExit(1)
+
+    cfg = load_config(ctx.obj.get("config_path"))
+    cfg.setdefault("source", {})["paths"] = [os.path.abspath(path)]
+
+    # Build minimal state for context
+    state = SystemState()
+    try:
+        state = _collect(cfg)
+    except Exception:
+        pass
+
+    locator = ProjectLocator(state, cfg)
+    projects = locator.locate()
+
+    if projects:
+        linker = CodeLinker()
+        linker.link(state.services, projects)
+        state.projects = projects
+
+    as_json = as_json or ctx.obj.get("json", False)
+
+    if as_json:
+        output = {
+            "projects": [p.to_dict() for p in projects],
+        }
+        click.echo(json_mod.dumps(output, indent=2, default=str))
+    else:
+        console = ConsoleRenderer()
+        console.render_code(projects)
 
 
 @main.command("version")

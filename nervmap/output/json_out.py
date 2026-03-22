@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 
+from nervmap import __version__
 from nervmap.models import SystemState, Issue
 from nervmap.utils import redact_env
 
@@ -22,7 +23,7 @@ class JsonRenderer:
                 d["metadata"]["env"] = redact_env(d["metadata"]["env"])
             services_data.append(d)
         output = {
-            "version": "0.1.0",
+            "version": __version__,
             "elapsed_seconds": round(elapsed, 2),
             "services": services_data,
             "connections": [c.to_dict() for c in state.connections],
@@ -38,5 +39,19 @@ class JsonRenderer:
             "disk_usage": state.disk_usage,
             "memory": state.memory,
         }
+        if state.projects:
+            output["projects"] = [p.to_dict() for p in state.projects]
+            # Cross-references: code -> infra connections
+            connections_to_infra = []
+            for proj in state.projects:
+                for env_ref in proj.env_refs:
+                    for svc_id in proj.linked_services:
+                        connections_to_infra.append({
+                            "from": proj.path,
+                            "to": svc_id,
+                            "via": env_ref,
+                        })
+            if connections_to_infra:
+                output["connections_to_infra"] = connections_to_infra
         json.dump(output, sys.stdout, indent=2, default=str)
         sys.stdout.write("\n")
