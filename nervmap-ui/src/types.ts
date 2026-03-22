@@ -73,6 +73,7 @@ export interface AIChain {
     target_host?: string;
   };
   consumers?: string[];
+  linked_services?: string[];
 }
 
 export interface NervMapState {
