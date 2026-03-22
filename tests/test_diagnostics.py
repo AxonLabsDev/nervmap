@@ -231,7 +231,7 @@ class TestEnvPortMismatchDockerHostname:
         svc = Service(id="docker:app", name="app", type="docker",
                       status="running",
                       metadata={"env": {
-                          "DOCLING_URL": "http://docling-serve:5001",
+                          "STORAGE_URL": "http://storage-api:9000",
                           "LANGFLOW_URL": "http://langflow:7860",
                       }})
         state = SystemState(services=[svc], listening_ports={})

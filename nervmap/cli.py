@@ -20,8 +20,8 @@ def _apply_scope(state: SystemState, scope: str | None) -> SystemState:
 
     Scope formats:
       - Path to dir containing docker-compose.yml: scans compose project name
-      - Pattern like 'docker:openrag*' or 'systemd:qwen*': glob match on service ID
-      - Simple name like 'openrag': matches anywhere in service ID or name
+      - Pattern like 'docker:myapp*' or 'systemd:llmserver*': glob match on service ID
+      - Simple name like 'myapp': matches anywhere in service ID or name
     """
     import copy
     import fnmatch
@@ -61,7 +61,7 @@ def _apply_scope(state: SystemState, scope: str | None) -> SystemState:
                 return True
             return False
 
-        # Glob pattern (e.g., 'docker:openrag*')
+        # Glob pattern (e.g., 'docker:myapp*')
         if is_glob:
             return fnmatch.fnmatch(sid, pat) or fnmatch.fnmatch(name, pat)
 
@@ -179,7 +179,7 @@ def _get_flag(ctx, name: str, local_value):
 @click.option("--quiet", is_flag=True, help="Show only issues, no service list.")
 @click.option("--deep", is_flag=True, help="Deep scan (parse config files).")
 @click.option("--config", "config_path", default=None, help="Path to .nervmap.yml.")
-@click.option("--scope", default=None, help="Limit scan to a scope: path to docker-compose dir, or pattern like 'docker:openrag*'.")
+@click.option("--scope", default=None, help="Limit scan to a scope: path to docker-compose dir, or pattern like 'docker:myapp*'.")
 @click.option("--show-secrets", is_flag=True, help="Include raw secrets in output (dangerous).")
 @click.option("--verbose", "-v", is_flag=True, help="Enable debug logging.")
 @click.option("--no-hooks", is_flag=True, help="Skip shell hook execution.")

@@ -13,25 +13,25 @@ class TestApplyScope:
         """Create a test state with mixed services."""
         return SystemState(
             services=[
-                Service(id="docker:openrag-backend", name="openrag-backend", type="docker",
+                Service(id="docker:myapp-backend", name="myapp-backend", type="docker",
                         status="running", ports=[8900],
-                        metadata={"labels": {"com.docker.compose.project": "openrag"}}),
-                Service(id="docker:openrag-frontend", name="openrag-frontend", type="docker",
+                        metadata={"labels": {"com.docker.compose.project": "myapp"}}),
+                Service(id="docker:myapp-frontend", name="myapp-frontend", type="docker",
                         status="running", ports=[3000],
-                        metadata={"labels": {"com.docker.compose.project": "openrag"}}),
-                Service(id="docker:gitea", name="gitea", type="docker",
-                        status="running", ports=[3080]),
+                        metadata={"labels": {"com.docker.compose.project": "myapp"}}),
+                Service(id="docker:codehost", name="codehost", type="docker",
+                        status="running", ports=[3090]),
                 Service(id="systemd:nginx", name="nginx", type="systemd",
                         status="running", ports=[80]),
-                Service(id="systemd:openrag-embeddings", name="openrag-embeddings", type="systemd",
+                Service(id="systemd:myapp-embeddings", name="myapp-embeddings", type="systemd",
                         status="running", ports=[5558]),
             ],
             connections=[
-                Connection(source="docker:openrag-frontend", target="docker:openrag-backend", type="inferred"),
-                Connection(source="docker:openrag-backend", target="systemd:openrag-embeddings", type="inferred"),
-                Connection(source="docker:gitea", target="systemd:nginx", type="inferred"),
+                Connection(source="docker:myapp-frontend", target="docker:myapp-backend", type="inferred"),
+                Connection(source="docker:myapp-backend", target="systemd:myapp-embeddings", type="inferred"),
+                Connection(source="docker:codehost", target="systemd:nginx", type="inferred"),
             ],
-            listening_ports={8900: "127.0.0.1", 3000: "127.0.0.1", 3080: "10.0.0.1", 80: "0.0.0.0", 5558: "127.0.0.1"},
+            listening_ports={8900: "127.0.0.1", 3000: "127.0.0.1", 3090: "10.0.0.1", 80: "0.0.0.0", 5558: "127.0.0.1"},
         )
 
     def test_none_scope_returns_same(self):
@@ -49,18 +49,18 @@ class TestApplyScope:
     def test_substring_match(self):
         """Substring matches service IDs and names."""
         state = self._make_state()
-        result = _apply_scope(state, "openrag")
+        result = _apply_scope(state, "myapp")
         names = {s.name for s in result.services}
-        assert "openrag-backend" in names
-        assert "openrag-frontend" in names
-        assert "openrag-embeddings" in names
-        assert "gitea" not in names
+        assert "myapp-backend" in names
+        assert "myapp-frontend" in names
+        assert "myapp-embeddings" in names
+        assert "codehost" not in names
         assert "nginx" not in names
 
     def test_glob_match(self):
         """Glob pattern matches service IDs."""
         state = self._make_state()
-        result = _apply_scope(state, "docker:openrag*")
+        result = _apply_scope(state, "docker:myapp*")
         assert len(result.services) == 2
         assert all(s.type == "docker" for s in result.services)
 
@@ -74,25 +74,25 @@ class TestApplyScope:
     def test_case_insensitive(self):
         """Matching is case insensitive."""
         state = self._make_state()
-        result = _apply_scope(state, "OPENRAG")
+        result = _apply_scope(state, "MYAPP")
         assert len(result.services) == 3
 
     def test_connections_filtered(self):
         """Connections are filtered to scoped services."""
         state = self._make_state()
-        result = _apply_scope(state, "openrag")
-        # Should include openrag connections but not gitea->nginx
+        result = _apply_scope(state, "myapp")
+        # Should include myapp connections but not codehost->nginx
         assert len(result.connections) == 2
         sources = {c.source for c in result.connections}
-        assert "docker:openrag-frontend" in sources
-        assert "docker:openrag-backend" in sources
-        assert "docker:gitea" not in sources
+        assert "docker:myapp-frontend" in sources
+        assert "docker:myapp-backend" in sources
+        assert "docker:codehost" not in sources
 
     def test_listening_ports_filtered(self):
         """Listening ports filtered to scoped services only."""
         state = self._make_state()
-        result = _apply_scope(state, "gitea")
-        assert 3080 in result.listening_ports
+        result = _apply_scope(state, "codehost")
+        assert 3090 in result.listening_ports
         assert 8900 not in result.listening_ports
 
     def test_established_filtered(self):
@@ -100,10 +100,10 @@ class TestApplyScope:
         state = self._make_state()
         state.established = [
             {"local_port": 8900, "remote_port": 5558, "pid": 100},
-            {"local_port": 3080, "remote_port": 80, "pid": 200},
+            {"local_port": 3090, "remote_port": 80, "pid": 200},
         ]
-        result = _apply_scope(state, "openrag")
-        # Only 8900 and 5558 belong to openrag services
+        result = _apply_scope(state, "myapp")
+        # Only 8900 and 5558 belong to myapp services
         assert len(result.established) == 1
         assert result.established[0]["local_port"] == 8900
 

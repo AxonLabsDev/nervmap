@@ -87,7 +87,7 @@ class DependencyMapper:
         name_to_id: dict[str, str] = {}
         for svc in self.state.services:
             name_to_id[svc.name.lower()] = svc.id
-            # Also map without compose project prefix (e.g., "openrag-backend" -> "backend")
+            # Also map without compose project prefix (e.g., "myapp-backend" -> "backend")
             if "-" in svc.name:
                 short = svc.name.rsplit("-", 1)[-1].lower()
                 if short not in name_to_id:

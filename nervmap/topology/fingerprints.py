@@ -83,11 +83,6 @@ PORT_FINGERPRINTS: dict[int, tuple[str, str]] = {
     587: ("smtp", "SMTP (submission)"),
     993: ("imap", "IMAP (TLS)"),
     995: ("pop3", "POP3 (TLS)"),
-    8124: ("http", "HTTP (custom)"),
-    5556: ("http", "HTTP (custom)"),
-    5001: ("http", "HTTP (custom)"),
-    5002: ("http", "HTTP (custom)"),
-    7681: ("http", "HTTP (custom)"),
 }
 
 
