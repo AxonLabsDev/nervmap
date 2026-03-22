@@ -6,7 +6,7 @@ Your infrastructure's nervous system. Discovers services, maps dependencies, ana
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-138%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-170%20passed-brightgreen.svg)]()
 
 ---
 
@@ -17,7 +17,8 @@ You arrive on a server. You type `nervmap`. In under 2 seconds, you see:
 - **Every service running** (Docker containers + systemd units + bare processes)
 - **Who depends on who** (inferred from TCP connections, env vars, Docker networks)
 - **Source code cross-references** (which code project runs in which container)
-- **What's broken and why** (21 diagnostic rules with severity, impact, and fix suggestions)
+- **AI agent chains** (which LLM, which config files, which terminal session)
+- **What's broken and why** (25 diagnostic rules with severity, impact, and fix suggestions)
 
 No config file. No setup wizard. No database. Just answers.
 
@@ -54,6 +55,10 @@ nervmap --scope /opt/myproject scan  # Scope to a docker-compose project dir
 # Source code analysis
 nervmap code /opt/myproject          # Analyze a specific project directory
 nervmap code /opt/myproject --json   # JSON output for code analysis
+
+# AI agent mapping
+nervmap ai                           # Map all AI agents + LLM backends
+nervmap ai --json                    # JSON output
 
 # Other
 nervmap version                      # Show version
@@ -144,6 +149,52 @@ Go: Gin, Gorilla, Fiber
 
 ---
 
+## AI Agent Chain Mapping (v0.3)
+
+NervMap traces the **complete execution chain** of every AI agent and LLM on the server — from the user's terminal to the inference engine, file by file.
+
+```bash
+nervmap ai
+```
+
+### What It Maps
+
+For each AI agent, NervMap shows:
+- **Terminal entry** — which ttyd/SSH port exposes the session
+- **Session multiplexer** — which tmux/screen session contains the agent
+- **Agent process** — PID, working directory, agent type
+- **Config files** — every file that controls behavior, with role and references
+- **LLM backend** — local model (path, GPU layers, context size) or cloud API (provider, auth method)
+
+### Config Chain Tracing
+
+NervMap recursively follows file references to build the full instruction chain:
+
+```
+ttyd :5001 -> tmux "dev" -> claude-code [PID]
+  I CLAUDE.md (project instructions, loaded every prompt)
+     I shared-rules.md (referenced instruction file)
+  S settings.json (hooks, permissions, plugins)
+     H pre-check.sh (hook: PreToolUse)
+     H startup.sh (hook: SessionStart)
+  Backend: api.anthropic.com (oauth)
+```
+
+### Supported Agents & Backends
+
+| Type | Detected By |
+|------|------------|
+| Claude Code | `claude` binary signature |
+| Codex CLI | `codex` binary signature |
+| Gemini CLI | `gemini` binary signature |
+| llama.cpp | `llama-server` in cmdline (extracts model, GPU layers, ctx) |
+| Ollama | `ollama serve` in cmdline |
+| vLLM | `vllm.entrypoints` in cmdline |
+| TGI | `text-generation-launcher` in cmdline |
+| Embedding servers | `embedding-server` / `embedding*.py` patterns |
+
+---
+
 ## Dependency Mapping
 
 NervMap infers connections between services using multiple evidence layers:
@@ -161,7 +212,7 @@ NervMap infers connections between services using multiple evidence layers:
 
 ## Diagnostics
 
-21 built-in rules, zero false positives, deterministic (no LLM required):
+25 built-in rules, zero false positives, deterministic (no LLM required):
 
 | Category | Rules |
 |----------|-------|
@@ -171,6 +222,7 @@ NervMap infers connections between services using multiple evidence layers:
 | **Dependencies** | `dependency-down`, `env-port-mismatch`, `circular-dependency` |
 | **Resources** | `disk-pressure`, `memory-oom-risk` |
 | **Code** (v0.2) | `code-port-drift`, `code-env-missing`, `code-dep-missing`, `code-entrypoint-mismatch`, `code-env-example-drift`, `code-dockerfile-no-healthcheck` |
+| **AI** (v0.3) | `ai-backend-down`, `ai-model-missing`, `ai-config-missing`, `ai-orphan-backend` |
 
 ### Code Diagnostic Rules (v0.2)
 
@@ -182,6 +234,15 @@ NervMap infers connections between services using multiple evidence layers:
 | `code-entrypoint-mismatch` | warning | Dockerfile CMD/ENTRYPOINT points to missing file |
 | `code-env-example-drift` | info | `.env.example` is missing vars that code references |
 | `code-dockerfile-no-healthcheck` | info | Dockerfile has no HEALTHCHECK instruction |
+
+### AI Diagnostic Rules (v0.3)
+
+| Rule | Severity | Detects |
+|------|----------|---------|
+| `ai-backend-down` | critical | Local LLM backend port is not listening |
+| `ai-model-missing` | critical | Model file referenced in cmdline does not exist |
+| `ai-config-missing` | info | Expected config file for agent type not found |
+| `ai-orphan-backend` | info | LLM backend running with no agent connected |
 
 Every issue includes:
 - **Severity** (critical / warning / info)
@@ -270,6 +331,8 @@ Hook data is always redacted (no secrets passed to external scripts).
 
 ## Roadmap
 
+- [x] Source code analysis (v0.2)
+- [x] AI agent chain mapping (v0.3)
 - [ ] `nervmap watch` — live monitoring daemon
 - [ ] `nervmap serve` — REST API + WebSocket
 - [ ] Web dashboard (Cytoscape.js graph)
@@ -277,6 +340,7 @@ Hook data is always redacted (no secrets passed to external scripts).
 - [ ] Kubernetes support
 - [ ] Community diagnostic rules (YAML format)
 - [ ] Incremental scan cache (SQLite)
+- [ ] Custom AI agent profiles in `.nervmap.yml`
 
 ---
 

@@ -1,14 +1,15 @@
-# NervMap — Specification v0.2.0
+# NervMap — Specification v0.3.0
 
 > `docker ps` shows containers. NervMap shows why your app is down.
 
-## Status: v0.2.0 — COMPLETE (10/10 review score)
+## Status: v0.3.0 — COMPLETE (10/10 review score)
 
-- 133 tests passing
+- 170 tests passing
 - 0% false positive rate
-- 21 diagnostic rules (15 infra + 6 code)
+- 25 diagnostic rules (15 infra + 6 code + 4 AI)
 - Source code analysis with 4-strategy linking
-- `nervmap code` subcommand
+- AI agent chain mapping with config tracing
+- `nervmap code` and `nervmap ai` subcommands
 
 ## Architecture
 
@@ -37,13 +38,21 @@ CLI Entry Point (Click)
   |     |     +-- ConfigParser (.env, Dockerfile, nginx, compose)
   |     +-- SourceCache (SQLite incremental, mtime+size->sha256) [wired for future use]
   |
+  +-- AI Agent Mapping (v0.3)
+  |     +-- AICollector (2-phase: process signatures + tmux/ttyd)
+  |     +-- ConfigResolver (static registry + /proc/fd hybrid, confidence 0.9)
+  |     +-- ChainParser (recursive file reference tracing)
+  |     +-- Signatures (Claude Code, Codex, Gemini, llama.cpp, Ollama, vLLM, TGI)
+  |     +-- AIRenderer (Rich tree view per chain)
+  |     +-- 4 AI diagnostic rules
+  |
   +-- Topology Builder
   |     +-- DependencyMapper (TCP established, env vars, docker-compose, Docker networks)
   |     +-- ServiceFingerprinter (50+ port->service type mappings)
   |     +-- Confidence scoring (100% declared, 85% observed, 60% inferred, 30% association)
   |
   +-- Diagnostic Engine
-  |     +-- RuleRunner (21 rules, deepcopy state, ignore.services regex)
+  |     +-- RuleRunner (25 rules, deepcopy state, ignore.services regex)
   |     +-- ImpactAnalyzer (dependent services per issue)
   |     +-- FixSuggester (deterministic, no LLM)
   |
@@ -180,11 +189,42 @@ Filters services, connections, listening_ports, and established data. All comman
 8. **Regex parsers, not AST** — fast, no tree-sitter dependency, good enough for env/port extraction
 9. **find_spec over __import__** — safe dependency checking without executing module code
 10. **Code analysis opt-out** — `--no-code` flag for infra-only scans
+11. **AI detection via signatures, not tracing** — no strace/eBPF/MITM, pure /proc + tmux + static registry
+12. **Config chain tracing** — recursive file reference parsing with depth limit and cycle protection
+13. **Confidence scoring on configs** — 1.0 for /proc/fd observed, 0.9 for known path + exists, 0.85 for referenced
+
+## AI Agent Chain Mapping (v0.3)
+
+### Discovery
+2-phase process:
+1. **Signature scan**: walk /proc/*/cmdline, match against known agent/backend patterns (+ detect ttyd terminals in same pass)
+2. **Session resolution**: `tmux list-panes -a` to map PIDs to sessions, ppid chain walk for ttyd linkage
+
+### Agent Signatures
+Claude Code, Codex CLI, Gemini CLI detected by binary name regex. llama.cpp, Ollama, vLLM, TGI detected by cmdline patterns.
+
+### Config Resolution
+- Static registry: known config paths per agent type (`{cwd}/CLAUDE.md`, `{home}/.claude/settings.json`, etc.)
+- /proc/PID/fd snapshot: files currently open (upgrades confidence to 1.0)
+- Content hash: sha256 for drift detection between scans
+
+### Config Chain Tracing
+Recursive parsing of config file contents to find referenced files:
+- Markdown: regex extraction of absolute file paths
+- JSON (settings): hooks, permissions, context files, plugins
+- Shell commands (`cat`, `source`): referenced file paths
+- Depth limit: 5 levels, cycle protection via `seen` set
+
+### Diagnostic Rules (4)
+- `ai-backend-down` — local LLM port not listening (critical)
+- `ai-model-missing` — model file path does not exist (critical)
+- `ai-config-missing` — expected config file not found (info)
+- `ai-orphan-backend` — LLM running with no agent connected (info)
 
 ## Roadmap
 
-- v0.3: watch mode, REST API, WebSocket, incremental SQLite cache, plugin system
-- v0.4: Cytoscape.js web dashboard, community rules YAML
+- v0.4: watch mode, REST API, WebSocket, incremental SQLite cache, plugin system
+- v0.5: Cytoscape.js web dashboard, community rules YAML
 - v1.0: Go rewrite (single binary), Kubernetes support
 
 ## License

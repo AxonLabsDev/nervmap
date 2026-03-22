@@ -164,10 +164,6 @@ def _parse_markdown_config(config: ConfigNode, seen: set[str], depth: int):
         config.role = "project instructions (loaded every prompt)"
     elif basename == "agents.md":
         config.role = "shared agent rules"
-    elif basename == "soul.md":
-        config.role = "agent identity + personality"
-    elif basename == "user.md":
-        config.role = "user profile + preferences"
     elif "memory" in basename.lower() or "memory" in config.path.lower():
         config.role = "persistent memory"
         config.config_type = "memory"
