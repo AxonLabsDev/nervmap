@@ -20,5 +20,10 @@ custom_services:
     health_url: "http://127.0.0.1:8123/health"
     timeout: 10
 
+source:
+  paths:                           # Additional source code dirs to scan
+    - /opt/myapp
+    - ~/projects/api
+
 hooks:
   on_issue: "~/.nervmap/hooks/notify.sh"

@@ -4,7 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-*.spec
+# Keep nervmap-linux-amd64.spec tracked (PyInstaller build spec)
 .DS_Store
 *.swp
 *~

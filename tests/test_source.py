@@ -823,6 +823,67 @@ class TestCodeRules:
         issues = check_code_dockerfile_no_healthcheck(state, DEFAULTS)
         assert len(issues) == 0
 
+    def test_code_port_drift_ignores_dockerfile_expose(self):
+        """Dockerfile EXPOSE ports should NOT trigger port-drift (infra, not code)."""
+        svc = Service(
+            id="docker:myapp", name="myapp", type="docker",
+            status="running", ports=[8080],
+        )
+        proj = CodeProject(
+            path="/opt/myapp", name="myapp", language="python",
+            framework=None, entry_point=None, deps_file=None,
+            file_count=10, dependencies=[], env_refs=[],
+            # port_bindings has NO source-code ports (EXPOSE was moved to metadata)
+            port_bindings=[],
+            linked_services=["docker:myapp"],
+            metadata={"dockerfile_expose_ports": [9200, 9300]},
+        )
+        state = SystemState(services=[svc])
+        state.projects = [proj]
+
+        issues = check_code_port_drift(state, DEFAULTS)
+        # No drift because port_bindings is empty (EXPOSE ports are in metadata only)
+        assert len(issues) == 0
+
+    def test_code_entrypoint_skip_app_image(self, tmp_path):
+        """Entrypoint check skipped when FROM is a specific app image (not base)."""
+        proj = CodeProject(
+            path=str(tmp_path), name="myapp", language="python",
+            framework=None, entry_point=None, deps_file=None,
+            file_count=5, dependencies=[], env_refs=[],
+            port_bindings=[], linked_services=["docker:myapp"],
+            metadata={
+                "dockerfile_cmd": '["opensearch"]',
+                "dockerfile_from_image": "opensearchproject/opensearch:2.11",
+            },
+        )
+        state = SystemState()
+        state.projects = [proj]
+
+        issues = check_code_entrypoint_mismatch(state, DEFAULTS)
+        # Should be skipped — opensearch is not a base image
+        assert len(issues) == 0
+
+    def test_code_entrypoint_checks_base_image(self, tmp_path):
+        """Entrypoint check runs when FROM is a base image (python, node, etc)."""
+        proj = CodeProject(
+            path=str(tmp_path), name="myapp", language="python",
+            framework=None, entry_point=None, deps_file=None,
+            file_count=5, dependencies=[], env_refs=[],
+            port_bindings=[], linked_services=["docker:myapp"],
+            metadata={
+                "dockerfile_cmd": '["python", "app.py"]',
+                "dockerfile_from_image": "python:3.11-slim",
+            },
+        )
+        # app.py does NOT exist
+        state = SystemState()
+        state.projects = [proj]
+
+        issues = check_code_entrypoint_mismatch(state, DEFAULTS)
+        assert len(issues) >= 1
+        assert issues[0].rule_id == "code-entrypoint-mismatch"
+
     def test_code_dep_missing(self, tmp_path):
         """Detect declared dependency not importable."""
         (tmp_path / "requirements.txt").write_text("flask\nnonexistent-pkg-xyz\n")

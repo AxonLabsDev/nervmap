@@ -329,6 +329,23 @@ class TestCircularDependency:
         issues = check_circular_dependency(state, DEFAULTS)
         assert len(issues) == 0
 
+    def test_declared_cycle_skipped(self):
+        """Cycles where all edges are declared (depends_on) are skipped."""
+        conn1 = Connection(source="docker:a", target="docker:b", type="declared")
+        conn2 = Connection(source="docker:b", target="docker:a", type="declared")
+        state = SystemState(connections=[conn1, conn2])
+        issues = check_circular_dependency(state, DEFAULTS)
+        assert len(issues) == 0
+
+    def test_2node_inferred_cycle_downgraded(self):
+        """2-node inferred cycles (A->B->A) are downgraded to info severity."""
+        conn1 = Connection(source="docker:a", target="docker:b", type="inferred")
+        conn2 = Connection(source="docker:b", target="docker:a", type="inferred")
+        state = SystemState(connections=[conn1, conn2])
+        issues = check_circular_dependency(state, DEFAULTS)
+        assert len(issues) >= 1
+        assert issues[0].severity == "info"
+
 
 class TestConnectionRefused:
     """Tests for connection-refused rule."""
