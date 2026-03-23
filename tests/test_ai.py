@@ -522,9 +522,9 @@ class TestConsumerDetection:
         )
         state = SystemState(
             services=[Service(id="process:myapp", name="myapp",
-                              type="process", status="running", ports=[8124])],
+                              type="process", status="running", ports=[9090])],
             established=[{
-                "local_addr": "127.0.0.1", "local_port": 8124,
+                "local_addr": "127.0.0.1", "local_port": 9090,
                 "remote_addr": "127.0.0.1", "remote_port": 8123,
             }],
         )
