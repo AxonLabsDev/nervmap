@@ -176,7 +176,7 @@ For each AI agent, NervMap shows:
 NervMap recursively follows file references to build the full instruction chain:
 
 ```
-ttyd :5001 -> tmux "dev" -> claude-code [PID]
+ttyd :8080 -> tmux "dev" -> claude-code [PID]
   I CLAUDE.md (project instructions, loaded every prompt)
      I shared-rules.md (referenced instruction file)
   S settings.json (hooks, permissions, plugins)

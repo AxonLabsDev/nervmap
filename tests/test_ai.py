@@ -120,7 +120,7 @@ class TestModels:
 
     def test_session_node_to_dict(self):
         s = SessionNode(
-            terminal_type="ttyd", terminal_port=5001,
+            terminal_type="ttyd", terminal_port=8080,
             mux_type="tmux", mux_session="claude",
         )
         d = s.to_dict()
