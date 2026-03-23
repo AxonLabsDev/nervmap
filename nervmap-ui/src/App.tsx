@@ -2,7 +2,7 @@
 
 import { useEffect } from "preact/hooks";
 import { useStore } from "./store";
-import { GraphPanel } from "./panels/GraphPanel";
+import { Graph3DPanel } from "./panels/Graph3DPanel";
 import { FileTreePanel } from "./panels/FileTreePanel";
 import { EditorPanel } from "./panels/EditorPanel";
 import type { PanelId } from "./store";
@@ -121,14 +121,14 @@ export function App() {
       {/* Desktop: 3 panels */}
       <div class="panels desktop-only">
         <FileTreePanel />
-        <GraphPanel />
+        <Graph3DPanel />
         <EditorPanel />
       </div>
 
       {/* Mobile: single panel + tabs */}
       <div class="mobile-only">
         <div class="mobile-panel">
-          {activePanel === "graph" && <GraphPanel />}
+          {activePanel === "graph" && <Graph3DPanel />}
           {activePanel === "tree" && <FileTreePanel />}
           {activePanel === "editor" && <EditorPanel />}
         </div>

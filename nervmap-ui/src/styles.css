@@ -115,6 +115,34 @@ body {
   font-weight: 400;
 }
 
+/* Breadcrumb */
+.breadcrumb {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.crumb {
+  padding: 2px 8px;
+  background: var(--border);
+  border: none;
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.crumb:hover {
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--text);
+}
+
+.crumb.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+
 /* Graph panel */
 .graph-panel {
   background: var(--bg);
@@ -123,6 +151,7 @@ body {
 .graph-canvas {
   flex: 1;
   width: 100%;
+  overflow: hidden;
 }
 
 /* Tree panel */

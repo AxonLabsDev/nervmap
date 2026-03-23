@@ -25,10 +25,12 @@ interface Store {
   // UI
   activePanel: PanelId;
   layoutMode: "topology" | "hierarchy";
+  scopePath: string | null;
 
   // Actions
   setState: (s: NervMapState) => void;
   setLoading: (v: boolean) => void;
+  setScopePath: (p: string | null) => void;
   setError: (e: string | null) => void;
   selectNode: (id: string) => void;
   selectFile: (path: string) => void;
@@ -51,10 +53,12 @@ export const useStore = create<Store>((set, get) => ({
   editorLanguage: "plaintext",
   activePanel: "graph",
   layoutMode: "topology",
+  scopePath: null,
 
   setState: (s) => set({ state: s, loading: false, error: null }),
   setLoading: (v) => set({ loading: v }),
   setError: (e) => set({ error: e, loading: false }),
+  setScopePath: (p) => set({ scopePath: p }),
 
   selectNode: (id) => {
     const s = get().state;
