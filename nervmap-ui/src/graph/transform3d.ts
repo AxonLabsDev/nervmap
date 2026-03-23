@@ -61,15 +61,10 @@ export function scanToGraphData(
   const links: GraphLink[] = [];
   const nodeIds = new Set<string>();
 
-  // Filter services by scope
+  // Filter services by scope (strict type match from breadcrumb)
   let services = data.services;
   if (scopePath) {
-    services = services.filter(
-      (s) =>
-        s.id.includes(scopePath) ||
-        s.name.includes(scopePath) ||
-        s.type === scopePath,
-    );
+    services = services.filter((s) => s.type === scopePath);
   }
 
   // Service nodes

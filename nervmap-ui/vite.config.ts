@@ -9,7 +9,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          cytoscape: ["cytoscape", "cytoscape-fcose"],
+          three: ["three", "3d-force-graph"],
           codemirror: ["codemirror", "@codemirror/state", "@codemirror/view"],
         },
       },
